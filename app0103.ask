@@ -20,8 +20,8 @@ DAT_END();
 		LMEM0PP(32, R01, T_UINT8, P01); LMEM0PP(32, R02, T_UINT8, P01); // x0, y0.
 		PLIMM(P02, L_POINT);
 		for (j = -8; j != 8; j++) {
-			LMEM0PP(32, R03, T_UINT8, P02); LMEM0PP(32, R04, T_UINT8, P02); // x1, y1.
 			col = i - j;
+			LMEM0PP(32, R03, T_UINT8, P02); LMEM0PP(32, R04, T_UINT8, P02); // x1, y1.
 			if (col <= 0) { col = 1 - col; }
 			if (col <= 7) {
 				api_drawLine(MODE_OR, col, x0, y0, x1, y1);

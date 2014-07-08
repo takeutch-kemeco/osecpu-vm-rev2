@@ -5,8 +5,10 @@
 void definesInit(Defines *def)
 {
 	int i;
-	for (i = 0; i < DEFINES_MAXLABELS; i++)
-		def->label[i].typ = 0; // 未使用.
+	for (i = 0; i < DEFINES_MAXLABELS; i++) {
+		def->label[i].typ = PTR_TYP_INVALID; // 未使用.
+		def->label[i].opt = -1; // 未使用.
+	}
 	return;
 }
 

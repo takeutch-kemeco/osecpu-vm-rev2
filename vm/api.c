@@ -114,8 +114,7 @@ void apiInit(OsecpuVm *vm)
 	j = 1;
 	for (i = 0; i < DEFINES_MAXLABELS; i++) {
 		if (j > 4) break;
-		if (vm->defines->label[i].typ == 0) continue; // –¢Žg—p.
-		if (vm->defines->label[i].opt == 0) continue;
+		if (vm->defines->label[i].opt != 1) continue;
 		if (vm->defines->label[i].typ == PTR_TYP_CODE) continue;
 		execStep_plimm(vm, j, i);
 		j++;

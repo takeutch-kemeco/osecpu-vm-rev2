@@ -493,14 +493,22 @@ id objc_main;
 
 int main(int argc, const UCHAR **argv)
 {
-  objc_main = [[Main alloc] init];
-  
-  NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
-  app = [[NSApplication alloc] init];
-  [objc_main createThread:argc args:argv];
-  [app run];
+	// by hikarupsp, 2014.06.12-
+
+	// Main thread
+	NSAutoreleasePool* pool;
+	ProcessSerialNumber psn = {0, kCurrentProcess};
+	// ForegroundApplicationになれるように設定(こうしないとキーイベントが取得できない)
+	TransformProcessType(&psn, kProcessTransformToForegroundApplication);
+
+	objc_main = [[Main alloc] init];
+	NSApp = [NSApplication sharedApplication];
+	pool = [[NSAutoreleasePool alloc] init];
+	[objc_main createThread:argc args:argv];
+	[NSApp run];
 	[pool release];
-  return 0;
+
+	return 0;
 }
 
 void drv_openWin(int sx, int sy, UCHAR *buf, char *winClosed)

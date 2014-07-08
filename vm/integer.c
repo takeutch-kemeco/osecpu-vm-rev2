@@ -147,11 +147,11 @@ fin1:
 
 int jitcAfterStepInteger(OsecpuJitc *jitc)
 {
-	int i, retcode = 0;
-	if (jitc->ope04 != NULL && jitc->dst != jitc->ope04) {
+	int opecode = jitc->hh4Buffer[0], retcode = 0;
+	Int32 *dst04 = jitc->ope04;
+	if (jitc->ope04 != NULL && opecode != 0x04 && opecode != 0x2f) {
 		// CND–½—ß‚Ì’¼Œã‚Ì–½—ß‚ðŒŸo.
-		Int32 *dst04 = jitc->ope04;
-		dst04[2] = jitc->instrLength; // ’¼Œã‚Ì–½—ß‚Ì–½—ß’·.
+		dst04[2] = (jitc->dst + jitc->instrLength) - (dst04 + 3); // ’¼Œã‚Ì–½—ß‚Ì–½—ß’·.
 		jitc->ope04 = NULL;
 	}
 	return 0;

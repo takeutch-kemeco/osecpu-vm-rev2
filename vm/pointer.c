@@ -41,11 +41,11 @@ int jitcStepPointer(OsecpuJitc *jitc)
 			jitcSetRetCode(pRC, JITC_BAD_LABEL);
 			goto fin;
 		}
-		if (jitc->defines->label[i].typ != 0) {
+		if (jitc->defines->label[i].typ != PTR_TYP_INVALID) {
 			jitcSetRetCode(pRC, JITC_LABEL_REDEFINED);
 			goto fin;
 		}
-		if (!(0 <= opt && opt <= 1)) {
+		if (!(0 <= opt && opt <= 2)) {
 			jitcSetRetCode(pRC, JITC_BAD_LABEL_TYPE);
 			goto fin;
 		}
@@ -63,7 +63,7 @@ int jitcStepPointer(OsecpuJitc *jitc)
 		}
 		jitcStep_checkPxx(pRC, p);
  		if (jitc->phase == 0) goto fin;
-		if (jitc->defines->label[i].typ == 0)
+		if (jitc->defines->label[i].typ == PTR_TYP_INVALID)
 			jitcSetRetCode(pRC, JITC_LABEL_UNDEFINED);
 		if (p != 0x3f && jitc->defines->label[i].opt == 0)
 			jitcSetRetCode(pRC, JITC_BAD_LABEL_TYPE);
