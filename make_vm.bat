@@ -1,0 +1,1 @@
+c:\mingw\bin\gcc.exe -o osecpu-test.exe -Wl,-s,-lgdi32 -Os hh4.c jitc.c exec.c test.c
