@@ -4,20 +4,50 @@ void drv_openWin(int x, int y, unsigned char *buf, char *winClosed);
 void drv_flshWin(int sx, int sy, int x0, int y0);
 void drv_sleep(int msec);
 
-#if (!defined(JITC_OSNUM))
+#if (!defined(DRV_OSNUM))
 	#if (defined(_WIN32))
-		#define JITC_OSNUM			0x0001
+		#define DRV_OSNUM			0x0001
 	#endif
 	#if (defined(__APPLE__))
-		#define JITC_OSNUM			0x0002
+		#define DRV_OSNUM			0x0002
 	#endif
 	#if (defined(__linux__))
-		#define JITC_OSNUM			0x0003
+		#define DRV_OSNUM			0x0003
 	#endif
 	/* 0001: win32-x86-32bit */
 	/* 0002: MacOS-x86-32bit */
 	/* 0003: linux-x86-32bit */
 #endif
+
+int *vram = 0, v_xsiz, v_ysiz;
+
+#define KEY_ENTER		'\n'
+#define KEY_ESC			27
+#define KEY_BACKSPACE	8
+#define KEY_TAB			9
+#define KEY_PAGEUP		0x1020
+#define KEY_PAGEDWN		0x1021
+#define	KEY_END			0x1022
+#define	KEY_HOME		0x1023
+#define KEY_LEFT		0x1024
+#define KEY_UP			0x1025
+#define KEY_RIGHT		0x1026
+#define KEY_DOWN		0x1027
+#define KEY_INS			0x1028
+#define KEY_DEL			0x1029
+
+#define KEYBUFSIZ		4096
+int *keybuf, keybuf_r, keybuf_w, keybuf_c;
+
+void putKeybuf(int i)
+{
+	if (keybuf_c < KEYBUFSIZ) {
+		keybuf[keybuf_w] = i;
+		keybuf_c++;
+		keybuf_w = (keybuf_w + 1) & (KEYBUFSIZ - 1);
+	}
+	return;
+}
 
 /* OSˆË‘¶•” */
 
@@ -81,7 +111,7 @@ void bl_readyWin(int n);
 
 static HANDLE threadhandle;
 
-int main(int argc, const UCHAR **argv)
+int main(int argc, const unsigned char **argv)
 {
 	return OsecpuMain(argc, argv);
 }

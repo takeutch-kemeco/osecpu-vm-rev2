@@ -140,8 +140,10 @@ int execAll(OsecpuVm *vm);
 #define BIT_DISABLE_REG		-1
 #define BIT_DISABLE_MEM		255
 
+#define PTR_TYP_NULL			0
 #define PTR_TYP_CODE			-1
 #define PTR_TYP_NATIVECODE		-2
+#define PTR_TYP_INVALID			-3	// 不定値状態.
 
 unsigned char *hh4StrToBin(unsigned char *src, unsigned char *src1, unsigned char *dst, unsigned char *dst1);
 
@@ -157,6 +159,7 @@ Int32 execStep_checkBitsRange(Int32 value, int bit, OsecpuVm *vm, int bit1, int 
 void jitcStep_checkBits32(int *pRC, int bits);
 void jitcStep_checkRxx(int *pRC, int rxx);
 void jitcStep_checkRxxNotR3F(int *pRC, int rxx);
+Int32 execStep_SignBitExtend(Int32 value, int bit);
 
 // pointer.c : ポインタ命令.
 void jitcInitPointer(OsecpuJitc *jitc);

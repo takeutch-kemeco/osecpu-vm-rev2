@@ -4,7 +4,7 @@ void apiInit(OsecpuVm *vm);
 
 #define BUFFER_SIZE		256
 
-int main(int argc, const char **argv)
+int OsecpuMain(int argc, const unsigned char **argv)
 {
 	Defines defs;
 	OsecpuJitc jitc;
@@ -67,10 +67,62 @@ int main(int argc, const char **argv)
 		"8e bf a0 1 2 1"				// PADD32(P01, UINT8, P01, R3F);
 		"88 1 2 0 3 a0"					// LMEM32(P01, UINT8, 0, R03);
 #endif
+
+#if 0	// rev1‚Ìapp0038‘Š“–.
 		"2 84 b0 a0"					// LIMM32(R30, 4);
+		"2 0 b1 a0"						// LIMM32(R31, 0);
+		"2 bf b2 a0"					// LIMM32(R32, -1);
+		"2 bf b3 a0"					// LIMM32(R33, -1);
+		"2 bf b4 a0"					// LIMM32(R34, -1);
 		"3 3 b0"						// PLIMM(P30, 3);
 		"9e a8 bf"						// PCP(P3F, P28);
 		"1 3 1"							// LB1(3);
+		"2 85 b0 a0"					// LIMM32(R30, 5);
+		"2 0 b1 a0"						// LIMM32(R31, 0);
+		"2 84 b2 a0"					// LIMM32(R32, 4);
+		"2 e12c b3 a0"					// LIMM32(R33, 300);
+		"2 e12c b4 a0"					// LIMM32(R34, 300);
+		"2 e0aa b5 a0"					// LIMM32(R35, 320-150);
+		"2 e05a b6 a0"					// LIMM32(R36, 240-150);
+		"3 4 b0"						// PLIMM(P30, 4);
+		"9e a8 bf"						// PCP(P3F, P28);
+		"1 4 1"							// LB1(4);
+#endif
+
+#if 1	// rev1‚Ìapp0006‘Š“–.
+		"2 0 0 a0"						// LIMM32(R00, 0);
+		"2 0 2 a0"						// LIMM32(R02, 0);
+		"2 90 b0 a0"					// LIMM32(R30, 0x10);
+		"2 e100 b1 a0"					// LIMM32(R31, 256);
+		"2 e100 b2 a0"					// LIMM32(R32, 256);
+		"3 5 b0"						// PLIMM(P30, 5);
+		"9e a8 bf"						// PCP(P3F, P28);
+		"1 5 1"							// LB1(5);
+		"2 0 1 a0"						// LIMM32(R01, 0);
+		"1 6 0"							// LB0(6);
+		"2 2 b0 a0"						// LIMM32(R30, 2);
+		"2 3 b1 a0"						// LIMM32(R31, 3);
+		"90 2 2 b2 a0"					// CP(R32, R02);
+		"90 0 0 b3 a0"					// CP(R33, R00);
+		"90 1 1 b4 a0"					// CP(R34, R01);
+		"3 87 b0"						// PLIMM(P30, 7);
+		"9e a8 bf"						// PCP(P3F, P28);
+		"1 87 1"						// LB1(7);
+		"2 e100 bf a0"					// LIMM32(R3F, 0x100);
+		"94 2 bf 2 a0"					// ADD(R02, R02, R3F);
+		"2 1 bf a0"						// LIMM32(R3F, 1);
+		"94 1 bf 1 a0"					// ADD(R01, R01, R3F);
+		"2 e100 bf a0"					// LIMM32(R3F, 256);
+		"a1 1 bf a0 bf a0"				// CMPNE32_32(R3F, R01, R3F);
+		"4 bf"							// CND(R3F);
+		"3 6 bf"						// PLIMM(P3F, 6);
+		"2 1 bf a0"						// LIMM32(R3F, 1);
+		"94 0 bf 0 a0"					// ADD(R00, R00, R3F);
+		"2 e100 bf a0"					// LIMM32(R3F, 256);
+		"a1 0 bf a0 bf a0"				// CMPNE32_32(R3F, R00, R3F);
+		"4 bf"							// CND(R3F);
+		"3 5 bf"						// PLIMM(P3F, 5);
+#endif
 
 		, NULL, hh4src, &hh4src[BUFFER_SIZE]
 	);
@@ -105,6 +157,7 @@ int main(int argc, const char **argv)
 	printf("F02=%.15f\n", vm.f[0x02]);
 	printf("F03=%f\n", vm.f[0x03]);
 	printf("F04=%f\n", vm.f[0x04]);
+	apiEnd(&vm);
 
 	return 0;
 }

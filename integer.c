@@ -168,17 +168,7 @@ Int32 execStep_checkBitsRange(Int32 value, int bit, OsecpuVm *vm, int bit1, int 
 			jitcSetRetCode(&vm->errorCode, EXEC_BITS_RANGE_OVER);
 	} else {
 		vm->prefix2f[0] = 0;
-		if (bit > 0) {
-			i = (-1) << bit;
-			if ((value & (1 << (bit - 1))) == 0) {
-				// 符号ビットが0だった.
-				value &= ~i;
-			} else {
-				// 符号ビットが1だった.
-				value |=  i;
-			}
-		} else
-			value = 0;
+		value = execStep_SignBitExtend(value, bit - 1);
 	}
 	return value;
 }
@@ -283,14 +273,7 @@ void execStepInteger(OsecpuVm *vm)
 			jitcSetRetCode(&vm->errorCode, EXEC_BAD_R2);
 			goto fin;
 		}
-		i = (-1) << vm->r[0x3f];
-		if ((vm->r[r1] & (1 << vm->r[0x3f])) == 0) {
-			// 符号ビットが0だった.
-			vm->r[r0] = vm->r[r1] & ~i;
-		} else {
-			// 符号ビットが1だった.
-			vm->r[r0] = vm->r[r1] |  i;
-		}
+		vm->r[r0] = execStep_SignBitExtend(vm->r[r1], vm->r[0x3f]);
 		vm->bit[r0] = bit;
 		vm->r[r0] = execStep_checkBitsRange(vm->r[r0], bit, vm, vm->bit[r1], 0);
 		ip += 5;
@@ -399,4 +382,20 @@ void jitcStep_checkRxxNotR3F(int *pRC, int rxx)
 	return;
 }
 
+Int32 execStep_SignBitExtend(Int32 value, int bit)
+// bitは符号ビットのある位置で、0～31を想定.
+{
+	if (bit >= 0) {
+		Int32 mask = (-1) << bit;
+		if ((value & (1 << bit)) == 0) {
+			// 符号ビットが0だった.
+			value &= ~mask;
+		} else {
+			// 符号ビットが1だった.
+			value |=  mask;
+		}
+	} else
+		value = 0; // bitが負の場合.
+	return value;
+}
 
