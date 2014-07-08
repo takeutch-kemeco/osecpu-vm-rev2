@@ -6,8 +6,20 @@ typedef int Int32; // 32bità»è„Ç≈Ç†ÇÍÇŒÇÊÇ¢Åi64bità»è„Ç≈Ç‡ÇÊÇ¢Åj.
 
 #define DEFINES_MAXLABELS	4096
 
+typedef struct _PtrCtrl {
+	int liveSign;
+	int size, typ;
+	unsigned char *p0;
+} PtrCtrl;
+
 typedef struct _PReg {
-	void *p;
+	unsigned char *p;
+	int typ;
+	unsigned char *p0, *p1;
+	int liveSign;
+	struct PtrCtrl *pls;
+	int flags;	/* read/writeÇ»Ç« */
+	unsigned char *bit;
 } PReg;
 
 typedef struct _Label {

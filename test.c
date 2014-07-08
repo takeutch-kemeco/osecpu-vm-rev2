@@ -9,6 +9,7 @@ int main(int argc, const char **argv)
 	OsecpuVm vm;
 	unsigned char hh4src[BUFFER_SIZE], *hh4src1;
 	Int32 i32buf[BUFFER_SIZE], j32buf[BUFFER_SIZE];
+	int rc;
 	jitc.defines = &defs;
 	vm.defines = &defs;
 
@@ -31,6 +32,7 @@ int main(int argc, const char **argv)
 		"4 bf"							// CND(R3F);
 		"3 0 bf"						// PLIMM(P3F, 0);
 
+#if 0
 		// F03 = 4 * (1 - 1/3 + 1/5 - 1/7 + ...)
 		// テストなので速度とかを気にせず、極力Fxxを使ってみる.
 		"c40 0 0 3 c40"					// FLIMM64(F03, 0);
@@ -47,10 +49,21 @@ int main(int argc, const char **argv)
 		"c49 5 bf c40 bf a0"			// FCMPNE32_64(R3F, F05, F3F);
 		"4 bf"							// CND(R3F);
 		"3 1 bf"						// PLIMM(P3F, 1);
+#endif
 
+#if 0
 		"2 0 3 0"						// LIMM0(R03, 0);
-		"90 3 3 3 a0",					// CP32(R03, R03); // ここでエラーコード1になる.
-		NULL, hh4src, &hh4src[BUFFER_SIZE]
+		"90 3 3 3 a0"					// CP32(R03, R03); // ここでエラーコード1になる.
+#endif
+
+#if 1
+		"1 2 1"							// LB1(2);
+		"ae 2 84 01 23 45 67"			// data(UINT8, 4, 0x01, 0x23, 0x45, 0x67);
+		"3 2 1"							// PLIMM(P01, 2);
+		"2 1 3 a0"						// LIMM32(R03, 1);
+#endif
+
+		, NULL, hh4src, &hh4src[BUFFER_SIZE]
 	);
 
 	if (hh4src1 == NULL) {
@@ -63,7 +76,9 @@ int main(int argc, const char **argv)
 	hh4ReaderInit(&jitc.hh4r, hh4src, 0, hh4src1, 0);
 	jitc.dst  =  j32buf;
 	jitc.dst1 = &j32buf[BUFFER_SIZE];
-	printf("jitcAll()=%d\n", jitcAll(&jitc)); // 0なら成功.
+	rc = jitcAll(&jitc);
+	printf("jitcAll()=%d\n", rc); // 0なら成功.
+	if (rc != 0) return 1;
 	*jitc.dst = -1; // デバッグ用の特殊opecode.
 	vm.ip  = j32buf;
 	vm.ip1 = jitc.dst;
@@ -72,11 +87,12 @@ int main(int argc, const char **argv)
 	// execAll()を使って、j32buf[]内の中間コードを実行する.
 	printf("execAll()=%d\n", execAll(&vm)); // 65535なら成功(EXEC_ABORT_OPECODE_M1).
 	printf("R00=%d\n", vm.r[0x00]);
+	printf("R01=%d\n", vm.r[0x01]);
+	printf("R02=%d\n", vm.r[0x02]);
+	printf("R03=%d\n", vm.r[0x03]);
 	printf("F00=%f\n", vm.f[0x00]);
 	printf("F01=%.15f\n", vm.f[0x01]);
 	printf("F02=%.15f\n", vm.f[0x02]);
-	printf("R01=%d\n", vm.r[0x01]);
-	printf("R02=%d\n", vm.r[0x02]);
 	printf("F03=%f\n", vm.f[0x03]);
 	printf("F04=%f\n", vm.f[0x04]);
 
