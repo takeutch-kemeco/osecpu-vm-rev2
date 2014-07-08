@@ -21,7 +21,7 @@ http://osecpu.osask.jp/wiki/?page0036 に旧バージョン向けのアプリケーションの作り
   takeutch-kemecoさん : VMのLinux版開発
   herbaさん : VMバグ発見（rev1）
   lambdaliceさん : VMバグ発見（rev1）
-  hikarupspさん : MacOS版改良パッチ
+  hikarupspさん : MacOS版改良パッチ, CMPcc命令のbit1の仕様についてアイデア提供
 
 <主要なアプリ>
   app0100 (  13バイト) : グラデーション

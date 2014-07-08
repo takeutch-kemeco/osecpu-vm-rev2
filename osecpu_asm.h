@@ -11,7 +11,7 @@
 #define	_								DI();
 #define	LB0(imm)						LB(0, imm); _
 #define	GLB(imm)						LB(1, imm); DBGINFO1(); 
-#define	ELB(imm)						LB(1, imm); DBGINFO1(); 
+#define	ELB(imm)						LB(2, imm); DBGINFO1(); 
 
 #define PALMEM(reg0, typ32, preg0, reg1, mclen)	PADD(P3F, typ32, preg0, reg1); LMEM(reg0, typ32, P3F, mclen)
 #define PASMEM(reg0, typ32, preg0, reg1, mclen)	PADD(P3F, typ32, preg0, reg1); SMEM(reg0, typ32, P3F, mclen)
@@ -51,6 +51,6 @@
 
 #define	DAT_SA0(label, typ32, length)	LB(1, label); DB(0xae); typ(typ32); imm(length)	/* simple-array */
 
-#define PADDINGPREFIX()					DB(0xfe,0x01,0xff)
-#define ALIGNPREFIX0()					DB(0xfe,0x01,0xfc)
-#define ALIGNPREFIX1()					DB(0xfe,0x01,0xfd)
+#define PADDINGPREFIX()					DB(0xfc,0xfe,0x50)
+#define ALIGNPREFIX0()					DB(0xfc,0xfe,0x60)
+#define ALIGNPREFIX1()					DB(0xfc,0xfe,0x87,0xf0)

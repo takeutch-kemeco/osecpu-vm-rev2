@@ -114,6 +114,8 @@ int jitcStepInteger(OsecpuJitc *jitc)
 		jitcStep_checkRxxNotR3F(pRC, r0);
 		jitcStep_checkBits32(pRC, bit);
 		jitc->prefix2f[0] = 0; // 2F-0.
+		if (opecode <= 0x19)
+			jitc->prefix2f[1] = 0; // 2F-1.
 		goto fin;
 	}
 	if (opecode == 0x13) {	// SBX.
@@ -178,9 +180,9 @@ Int32 execStep_checkBitsRange(Int32 value, int bit, OsecpuVm *vm, int bit1, int 
 void execStepInteger(OsecpuVm *vm)
 {
 	const Int32 *ip = vm->ip;
-	Int32 opecode = ip[0], imm;
+	Int32 opecode = ip[0], imm, i32, tmp32;
 	int bit, bit0, bit1, r, r0, r1, r2, p, typ, typSign, typSize0, typSize1;
-	int i, mbit, tbit;
+	int i, mbit, tbit, tmin, tmax;
 	if (opecode == 0x02) { // LIMM(imm, Rxx, bits);
 		imm = ip[1]; r = ip[2]; bit = ip[3]; 
 		vm->r[r] = imm;
@@ -233,6 +235,7 @@ void execStepInteger(OsecpuVm *vm)
 			if (mbit < tbit && mbit < bit)
 				jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);	// 不確定ビットの参照がある場合.
 		} else {
+			// 2F-1: レジスタ退避用のリードライト.
 			if (bit > mbit)
 				bit = mbit;
 			vm->prefix2f[1] = 0;
@@ -243,16 +246,116 @@ void execStepInteger(OsecpuVm *vm)
 		ip += 6;
 		goto fin;
 	}
-
-	if (0x10 <= opecode && opecode <= 0x16 && opecode != 0x13) {
-		r1 = ip[1]; r2 = ip[2]; r0 = ip[3]; bit = ip[4];
-		if (vm->bit[r1] != BIT_DISABLE_REG && bit > vm->bit[r1]) {
+	if (opecode == 0x09) {	/* SMEM(r, bit, p, typ, 0); */
+		r = ip[1]; bit = ip[2]; p = ip[3]; typ = ip[4]; i = ip[5];
+		execStep_checkMemAccess(vm, p, typ, EXEC_CMA_FLAG_WRITE);
+		if (vm->errorCode != 0) goto fin;
+		getTypInfoInteger(typ, &typSize0, &typSize1, &typSign);
+		if (vm->prefix2f[2] != 0) {
+			// 2F-2: メモリのbitを0にする.
+			*(vm->p[p].bit) = 0;
+			vm->prefix2f[2] = 0;
+			ip += 6;
+			goto fin;
+		}
+		if (vm->bit[r] != BIT_DISABLE_REG && bit > vm->bit[r]) {
 			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
 			goto fin;
 		}
-		if (vm->bit[r2] != BIT_DISABLE_REG && bit > vm->bit[r2]) {
-			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
-			goto fin;
+		if (typSign == 0 && vm->r[r] < 0) {
+			// マイナスの数値をunsignedなtypに書き込もうとした.
+			// (以下のif文では32bitのときの判定ができないので、これはムダではない.)
+			if (vm->prefix2f[0] == 0 && vm->prefix2f[1] == 0) {
+				// 通常モード.
+				jitcSetRetCode(&vm->errorCode, EXEC_BITS_RANGE_OVER); 
+				goto fin;
+			}
+			if (vm->prefix2f[1] != 0) {
+				// 2F-1: レジスタ退避用のリードライト.
+				*(vm->p[p].bit) = 0; // 値が壊れたので完全に不定にする.
+				vm->prefix2f[1] = 0;
+				ip += 6;
+				goto fin;
+			}
+		}
+		if (typSize0 < 32) {
+			tmax = (1 << typSize0) - 1;
+			tmin = 0;
+			if (typSign != 0) {
+				tmax >>= 1;
+				tmin = ~tmax;
+			}
+			if (vm->prefix2f[0] == 0 && vm->prefix2f[1] == 0) {
+				// 通常モード.
+				if (!(tmin <= vm->r[r] && vm->r[r] <= tmax))
+					jitcSetRetCode(&vm->errorCode, EXEC_BITS_RANGE_OVER);
+			}
+			if (vm->prefix2f[1] != 0) {
+				// 2F-1: レジスタ退避用のリードライト.
+				if (!(tmin <= vm->r[r] && vm->r[r] <= tmax)) {
+					*(vm->p[p].bit) = 0; // 値が壊れたので完全に不定にする.
+					vm->prefix2f[1] = 0;
+					ip += 6;
+					goto fin;
+				}
+			}
+		}
+		mbit = typSize0;
+		if (mbit < typSize0)
+			mbit = bit;
+		if (vm->bit[r] != BIT_DISABLE_REG && mbit < vm->bit[r])
+			mbit = vm->bit[r];
+		*(vm->p[p].bit) = mbit;
+		i = vm->r[r];
+		if (vm->prefix2f[0] != 0) {
+			// 2F-1: マスクライト.
+			if (typSize0 < 32) {
+				if (typSign == 0)
+					i &= tmax;
+				else
+					i = execStep_SignBitExtend(i, typSize0 - 1);
+			}
+		}
+		if (typSize1 == 1 && typSign == 0) {
+			unsigned char *puc = (unsigned char *) vm->p[p].p;
+			*puc = i;
+		}
+		if (typSize1 == 1 && typSign != 0) {
+			signed char *psc = (signed char *) vm->p[p].p;
+			*psc = i;
+		}
+		if (typSize1 == 2 && typSign == 0) {
+			unsigned short *pus = (unsigned short *) vm->p[p].p;
+			*pus = i;
+		}
+		if (typSize1 == 2 && typSign != 0) {
+			signed short *pss = (signed short *) vm->p[p].p;
+			*pss = i;
+		}
+		if (typSize1 == 4 && typSign == 0) {
+			unsigned int *pui = (unsigned int *) vm->p[p].p;
+			*pui = i;
+		}
+		if (typSize1 == 4 && typSign != 0) {
+			signed int *psi = (signed int *) vm->p[p].p;
+			*psi = i;
+		}
+		vm->prefix2f[0] = 0;
+		vm->prefix2f[1] = 0;
+		ip += 6;
+		goto fin;
+	}
+	if (0x10 <= opecode && opecode <= 0x16 && opecode != 0x13) {
+		r1 = ip[1]; r2 = ip[2]; r0 = ip[3]; bit = ip[4];
+		if (vm->prefix2f[1] == 0) {
+			if (vm->bit[r1] != BIT_DISABLE_REG && bit > vm->bit[r1]) {
+				jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
+				goto fin;
+			}
+			if (vm->bit[r2] != BIT_DISABLE_REG && bit > vm->bit[r2]) {
+				jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
+				goto fin;
+			}
 		}
 		if (opecode == 0x10) vm->r[r0] = vm->r[r1] | vm->r[r2]; // OR(r0, r1, r2, bits);
 		if (opecode == 0x11) vm->r[r0] = vm->r[r1] ^ vm->r[r2]; // XOR(r0, r1, r2, bits);
@@ -262,6 +365,7 @@ void execStepInteger(OsecpuVm *vm)
 		if (opecode == 0x16) vm->r[r0] = vm->r[r1] * vm->r[r2]; // MUL(r0, r1, r2, bits);
 		vm->bit[r0] = bit;
 		vm->r[r0] = execStep_checkBitsRange(vm->r[r0], bit, vm, vm->bit[r1], vm->bit[r2]);
+		vm->prefix2f[1] = 0;
 		ip += 5;
 		goto fin;
 	}
@@ -283,7 +387,7 @@ void execStepInteger(OsecpuVm *vm)
 	}
 	if (0x18 <= opecode && opecode <= 0x19) {
 		r1 = ip[1]; r2 = ip[2]; r0 = ip[3]; bit = ip[4];
-		if (vm->bit[r1] != BIT_DISABLE_REG && bit > vm->bit[r1]) {
+		if (vm->prefix2f[1] == 0 && vm->bit[r1] != BIT_DISABLE_REG && bit > vm->bit[r1]) {
 			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
 			goto fin;
 		}
@@ -297,6 +401,7 @@ void execStepInteger(OsecpuVm *vm)
 			vm->r[r0] = vm->r[r1] >> vm->r[r2];	// SAR
 		vm->bit[r0] = bit;
 		vm->r[r0] = execStep_checkBitsRange(vm->r[r0], bit, vm, vm->bit[r1], 0);
+		vm->prefix2f[1] = 0;
 		ip += 5;
 		goto fin;
 	}
@@ -332,6 +437,17 @@ void execStepInteger(OsecpuVm *vm)
 		if (vm->bit[r2] != BIT_DISABLE_REG && bit1 > vm->bit[r2]) {
 			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
 			goto fin;
+		}
+		if (bit1 < 32) {
+			// 比較対象の差が、符号付整数でbit1の範囲の整数で表現可能かどうかをチェック.
+			// どちらからどちらを引くのかは規定しないので、たとえば4ビットの場合のチェックは、
+			// -8～+7ではなく、-7～+7になる.
+			i32 = vm->r[r1] - vm->r[r2];
+			tmp32 = (1 << bit1) - 1;
+			if (!(- tmp32 <= i32 && i32 <= tmp32)) {
+				jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
+				goto fin;
+			}
 		}
 		if (opecode == 0x20)
 			i = vm->r[r1] == vm->r[r2];

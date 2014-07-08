@@ -14,9 +14,10 @@ static ApiWork apiWork;
 
 const Int32 *apiEntry(OsecpuVm *vm);
 void apiInit(OsecpuVm *vm);
-void apiEnd(OsecpuVm *vm);
+void apiEnd(OsecpuVm *vm, Int32 retcode);
 
 #define BUFFER_SIZE		1024 * 1024	// 1M
+#define KEYBUFSIZ		4096
 
 int OsecpuMain(int argc, const unsigned char **argv)
 {
@@ -93,7 +94,7 @@ int OsecpuMain(int argc, const unsigned char **argv)
 		fprintf(stderr, "execAll()=%d, DR0=%d\n", rc, vm.dr[0]); // EXEC_SRC_OVERRUNなら成功.
 		exit(1);
 	}
-	apiEnd(&vm);
+	apiEnd(&vm, 0);
 	return 0;
 }
 
@@ -103,6 +104,7 @@ void drv_openWin(int x, int y, unsigned char *buf, char *winClosed);
 void drv_flshWin(int sx, int sy, int x0, int y0);
 void drv_sleep(int msec);
 extern int *vram, v_xsiz, v_ysiz;
+extern int *keybuf, keybuf_r, keybuf_w, keybuf_c;
 
 void apiInit(OsecpuVm *vm)
 {
@@ -119,14 +121,16 @@ void apiInit(OsecpuVm *vm)
 		execStep_plimm(vm, j, i);
 		j++;
 	}
-	vm->p[0x28].typ = PTR_TYP_NATIVECODE;
-	vm->p[0x28].p = (void *) &apiEntry;
+	vm->p[0x2f].typ = PTR_TYP_NATIVECODE;
+	vm->p[0x2f].p = (void *) &apiEntry;
 	apiWork.winClosed = 0;
 	apiWork.autoSleep = 0;
 //	apiWork.col3bgr = 0;
 	apiWork.lastConsoleChar = '\n';
 //	if (setjmp(apiWork.setjmpEnv) != 0)
 //		apiEnd(vm);
+	keybuf_r = keybuf_w = keybuf_c = 0;
+	keybuf = malloc(KEYBUFSIZ * sizeof (int));
 	return;
 }
 
@@ -140,6 +144,7 @@ void api0005_oval(OsecpuVm *vm);
 void api0006_drawString(OsecpuVm *vm);
 void api0008_exit(OsecpuVm *vm);
 void api0009_sleep(OsecpuVm *vm);
+void api000d_inkey(OsecpuVm *vm);
 void api0010_openWin(OsecpuVm *vm);
 
 const Int32 *apiEntry(OsecpuVm *vm)
@@ -168,6 +173,7 @@ const Int32 *apiEntry(OsecpuVm *vm)
 	if (func == 0x0006) { api0006_drawString(vm);	goto fin; }
 	if (func == 0x0008) { api0008_exit(vm);			goto fin; }
 	if (func == 0x0009) { api0009_sleep(vm);		goto fin; }
+	if (func == 0x000d) { api000d_inkey(vm);		goto fin; }
 	if (func == 0x0010) { api0010_openWin(vm);		goto fin; }
 	jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
 fin: ;
@@ -178,7 +184,7 @@ fin: ;
 	return retcode;
 }
 
-void apiEnd(OsecpuVm *vm)
+void apiEnd(OsecpuVm *vm, Int32 retcode)
 {
 	// 終了処理.
 	if (apiWork.autoSleep != 0) {
@@ -189,7 +195,7 @@ void apiEnd(OsecpuVm *vm)
 	}
 	if (apiWork.lastConsoleChar != '\n')
 		putchar('\n');
-	exit(0);
+	exit(retcode);
 }
 
 Int32 apiGetRxx(OsecpuVm *vm, int r, int bit)
@@ -543,8 +549,79 @@ void api0005_oval(OsecpuVm *vm)
 }
 
 void api0006_drawString(OsecpuVm *vm) { }
-void api0008_exit(OsecpuVm *vm) { }
-void api0009_sleep(OsecpuVm *vm) { }
+
+void api0008_exit(OsecpuVm *vm)
+{
+	apiWork.autoSleep = 0;
+	apiEnd(vm, apiGetRxx(vm, 0x31, 32));
+}
+
+void api0009_sleep(OsecpuVm *vm)
+{
+	int mod = apiGetRxx(vm, 0x31, 16), msec = apiGetRxx(vm, 0x32, 32);
+	// 1:入力待ち.
+	// 2:flshの抑制.
+	if (msec == -1) {
+	//	apiWork.autoSleep = 1;
+		apiEnd(vm, 0);
+	}
+	if (msec < 0) {
+		jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
+		longjmp(apiWork.setjmpErr, 1);
+	}
+//	apiWork.autoSleep = 0; // rev2ではこれをやらない.
+		// すぐに終了したければ api0008_exit() を使う.
+	if ((mod & 2) == 0 && vram != NULL)
+		drv_flshWin(v_xsiz, v_ysiz, 0, 0);
+	for (;;) {
+		if (apiWork.winClosed != 0)
+			apiEnd(vm, 1); // ユーザによる中断.
+		drv_sleep(msec);
+		if ((mod & 1) == 0 || keybuf_c > 0) break;
+	}
+	return;
+}
+
+void api000d_inkey(OsecpuVm *vm)
+{
+	int mod = apiGetRxx(vm, 0x31, 16);
+	//  1:get(0)/peek(1)
+	//  2:window(0)/stdin(1)
+	//	4: shift, lock系を有効化.
+	//	8: 左右のshift系を区別する.
+	vm->bit[0x30] = 32;
+	vm->r[0x30] = -1;
+	if (2 <= mod && mod <= 3) {
+		vm->r[0x30] = fgetc(stdin);
+		if (vm->r[0x30] == EOF)
+			vm->r[0x30] = -1;
+		if (mod == 3 && vm->r[0x30] != -1)
+			ungetc(vm->r[0x30], stdin);
+		goto fin;
+	}
+	if ((mod & 2) != 0) {
+		jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
+		longjmp(apiWork.setjmpErr, 1);
+	}
+	if (keybuf_c > 0) {
+		vm->r[0x30] = keybuf[keybuf_r];
+		if ((mod & 4) == 0) vm->r[0x30] &= 0x3e3effff;
+		if ((mod & 8) == 0) vm->r[0x30] |= (vm->r[0x30] >> 8) & 0xff0000;
+		if ((mod & 1) == 0) {
+			keybuf_c--;
+			keybuf_r = (keybuf_r + 1) & (KEYBUFSIZ - 1);
+		}
+	}
+	vm->bit[0x31] = vm->bit[0x32] = 32;
+	vm->r[0x31] = vm->r[0x31] = 0;
+	if (vm->r[0x30] == 4132) vm->r[0x31]--;
+	if (vm->r[0x30] == 4133) vm->r[0x32]--;
+	if (vm->r[0x30] == 4134) vm->r[0x31]++;
+	if (vm->r[0x30] == 4135) vm->r[0x32]++;
+fin:
+	return;
+}
+
 
 void api0010_openWin(OsecpuVm *vm)
 {

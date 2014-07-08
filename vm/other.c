@@ -1,6 +1,6 @@
 #include "osecpu-vm.h"
 
-// ‚»‚Ì‘¼‚Ì–½—ß: 00, 2F, FD, FE
+// ‚»‚Ì‘¼‚Ì–½—ß: 00, 2F, 3C, 3D, FD, FE
 
 void jitcInitOther(OsecpuJitc *jitc)
 {
@@ -12,7 +12,7 @@ int jitcStepOther(OsecpuJitc *jitc)
 {
 	Int32 *ip = jitc->hh4Buffer;
 	Int32 opecode = ip[0], imm;
-	int bit, bit0, bit1, r, r0, r1, r2, p, typ;
+	int bit, bit0, bit1, r, r0, r1, r2, p, typ, f;
 	int retcode = -1, *pRC = &retcode;
 	int i, j;
 	if (opecode == 0x00) { /* NOP */
@@ -26,6 +26,20 @@ int jitcStepOther(OsecpuJitc *jitc)
 			jitc->prefix2f[i] = 1;
 		else
 			jitcSetRetCode(pRC, JITC_BAD_PREFIX);
+		goto fin;
+	}
+	if (opecode == 0x3c) {
+		jitcSetHh4BufferSimple(jitc, 7);
+		r = ip[1]; p = ip[2]; f = ip[3]; bit0 = ip[4]; bit1 = ip[5]; typ = ip[6];
+		if (typ != PTR_TYP_NULL)
+			jitcSetRetCode(pRC, JITC_UNSUPPORTED);
+		goto fin;
+	}
+	if (opecode == 0x3d) {
+		jitcSetHh4BufferSimple(jitc, 7);
+		r = ip[1]; p = ip[2]; f = ip[3]; bit0 = ip[4]; bit1 = ip[5]; typ = ip[6];
+		if (typ != PTR_TYP_NULL)
+			jitcSetRetCode(pRC, JITC_UNSUPPORTED);
 		goto fin;
 	}
 	if (opecode == 0xfd) {

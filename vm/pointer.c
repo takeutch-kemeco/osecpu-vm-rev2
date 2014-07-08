@@ -153,6 +153,7 @@ int jitcStepPointer(OsecpuJitc *jitc)
 				// 1つ前、2つ前、3つ前...の命令をチェックしている.
 			if (dstLog == NULL) break;
 			if (dstLog[0] != 0x01) break;
+			if (dstLog[2] != 1) break; // opt=1以外はデータラベルにはできない.
 			i = dstLog[1];
 			jitc->defines->label[i].typ = typ;
 			jitc->defines->label[i].dst = ip;

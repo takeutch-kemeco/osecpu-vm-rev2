@@ -620,11 +620,11 @@ int fcode_putLimmOrCp(DecodeFcodeStr *s, int bit, int r)
 	return i;
 }
 
-void fcode_putPcallP28(DecodeFcodeStr *s)
+void fcode_putPcallP2f(DecodeFcodeStr *s)
 {
 	s->lastLabel++;
 	fcode_putPlimm(s, 0x30, s->lastLabel);
-	fcode_putPjmp(s, 0x28);
+	fcode_putPjmp(s, 0x2f);
 	fcode_putLb(s, 2, s->lastLabel);
 	fcode_putRemark0(s);
 	return;
@@ -883,7 +883,7 @@ void fcode_api0002(DecodeFcodeStr *s)
 		fcode_putCp(s, 16, 0x34, 0x02); // y.
 		s->flag4 = 0;
 	}
-	fcode_putPcallP28(s);
+	fcode_putPcallP2f(s);
 	return;
 }
 
@@ -907,7 +907,7 @@ void fcode_api0003(DecodeFcodeStr *s)
 		fcode_putCp(s, 16, 0x36, 0x04); // y0.
 		s->flag4 = 0;
 	}
-	fcode_putPcallP28(s);
+	fcode_putPcallP2f(s);
 	return;
 }
 
@@ -932,7 +932,7 @@ void fcode_api0004(DecodeFcodeStr *s)
 		fcode_putCp(s, 16, 0x36, 0x04); // y0.
 		s->flag4 = 0;
 	}
-	fcode_putPcallP28(s);
+	fcode_putPcallP2f(s);
 	return;
 }
 
@@ -957,7 +957,7 @@ void fcode_api0005(DecodeFcodeStr *s)
 		fcode_putCp(s, 16, 0x36, 0x04); // y0.
 		s->flag4 = 0;
 	}
-	fcode_putPcallP28(s);
+	fcode_putPcallP2f(s);
 	return;
 }
 
@@ -968,7 +968,7 @@ void fcode_api0010(DecodeFcodeStr *s)
 	fcode_putLimm(s, 16, 0x30, 0x0010);
 	fcode_putLimmOrCp(s, 16, 0x31); // xsiz.
 	fcode_putLimmOrCp(s, 16, 0x32); // ysiz.
-	fcode_putPcallP28(s);
+	fcode_putPcallP2f(s);
 	return;
 }
 

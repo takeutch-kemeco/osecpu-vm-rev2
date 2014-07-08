@@ -172,7 +172,7 @@ int main(int argc, const UCHAR **argv)
 			 "  aska   ver.0.20\n"//108
 			 "  prepro ver.0.01\n"
 			 "  lbstk  ver.0.03\n"
-			 "  db2bin ver.0.15\n"//110
+			 "  db2bin ver.0.16\n"//112
 			 "  disasm ver.0.02\n"
 			 "  appack ver.0.20\n"//110
 			 "  maklib ver.0.01\n"
@@ -2545,7 +2545,7 @@ int db2binSub0(struct Work *w, const UCHAR **pp, UCHAR **qq)
 			"2PLIMM(",				"DB(0xf3); imm(%1); p(%0);",
 			"1CND(",				"DB(0xf4); r(%0);",
 			"5LMEM(",				"DB(0x88); p(%3); typ(%2); imm(%4); r(%1); bit(%0);",
-		//	"4SMEM(",				"DB(0x09,%0); DDBE(%1); DB(%2-0x40,%3);",
+			"5SMEM(",				"DB(0x89); r(%1); bit(%0); p(%3); typ(%2); imm(%4);",
 		//	"4PLMEM(",				"DB(0x0a,%0-0x40); DDBE(%1); DB(%2-0x40,%3);",
 		//	"4PSMEM(",				"DB(0x0b,%0-0x40); DDBE(%1); DB(%2-0x40,%3);",
 			"5PADD(",				"DB(0x8e); p(%3); typ(%2); r(%4); bit(%0); p(%1);",
@@ -2751,6 +2751,7 @@ int db2binSub2Len(const UCHAR *src)
 	if (src[0] == 0xf3 && src[1] == 0xf7 && src[2] == 0x88) i = 8; // PLIMM
 	if (src[0] == 0xf4) i = 2; // CND
 	if (src[0] == 0x88 && src[2] == 0xf7 && src[3] == 0x88 && src[8] == 0xf7 && src[9] == 0x88 && src[15] == 0xf7 && src[16] == 0x88) i = 21;
+	if (src[0] == 0x89 && src[2] == 0xf7 && src[3] == 0x88 && src[9] == 0xf7 && src[10] == 0x88 && src[15] == 0xf7 && src[16] == 0x88) i = 21;
 	if (src[0] == 0x8e && src[2] == 0xf7 && src[3] == 0x88 && src[9] == 0xf7 && src[10] == 0x88) i = 16;
 	if (0x90 <= src[0] && src[0] <= 0x9b && src[0] != 0x97 && src[4] == 0xf7 && src[5] == 0x88) i = 10; // OR...MOD
 	if (src[0] == 0x9e) i = 3; // PCP
@@ -2765,11 +2766,14 @@ int db2binSub2Len(const UCHAR *src)
 			fprintf(stderr, "db2binSub2Len: error: F0 (align 8bit) bit=%d len=%d\n", j, i);
 		i = 13 + ((i * j) >> 3);
 	}
+	if (src[0] == 0xbc && src[1] == 0xf0) i = 2; // ENTER
+	if (src[0] == 0xbd && src[1] == 0xf0) i = 2; // LEAVE
 	if (src[0] == 0xfc && src[1] == 0xfd && src[2] == 0xf7 && src[3] == 0x88 && src[8] == 0xf0) i = 9; // LIDR
 	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x00) i = 3; // remark-0
 	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x10) i = 3; // remark-1
 	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x21 && src[3] == 0xf7 && src[4] == 0x88) i = 9; // remark-2
 	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x30) i = 3; // remark-3
+	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x50) i = 3; // remark-5
 #if 0
 	if (*src == 0x00) i = 1;
 	if (0x01 <= *src && *src < 0x04) i = 6;
