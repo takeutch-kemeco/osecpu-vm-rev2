@@ -1,23 +1,30 @@
 #include "osecpu-vm.h"
 
-// 0xc0`0xdf‚É–½—ß‚ðŠg’£‚·‚é‚½‚ß‚Ì‚à‚Ì.
+// C0-DF‚É–½—ß‚ðŠg’£‚·‚é‚½‚ß‚Ì‚à‚Ì.
 
-Int32 *ext_hh4Decode(Jitc *jitc, Int32 opecode)
+void OsecpuInitExtend()
 {
-	return jitc->dst;
+	return;
 }
 
-int ext_instrLength(const Int32 *src, const Int32 *src1)
+int instrLengthExtend(const Int32 *src, const Int32 *src1)
+// instrLengthSimpleInitTool()‚Å“o˜^‚µ‚Ä‚¢‚È‚¢‚à‚Ì‚¾‚¯‚É”½‰ž‚·‚ê‚Î‚æ‚¢.
 {
 	return 0;
 }
 
-int ext_jitcStep(Jitc *jitc)
+Int32 *hh4DecodeExtend(OsecpuJitc *jitc, Int32 opecode)
+// instrLengthSimpleInitTool()‚Å“o˜^‚µ‚Ä‚¢‚È‚¢‚à‚Ì‚¾‚¯‚É”½‰ž‚·‚ê‚Î‚æ‚¢.
 {
-	return JITC_BAD_OPECODE;
+	return jitc->dst;
 }
 
-void ext_execStep(VM *vm)
+int jitcStepExtend(OsecpuJitc *jitc)
+{
+	return -1;
+}
+
+void execStepExtend(OsecpuVm *vm)
 {
 	return;
 }

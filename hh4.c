@@ -71,10 +71,19 @@ Int32 hh4GetSigned(HH4Reader *hh4r)
 	return i;
 }
 
-Int32 *hh4Decode(Jitc *jitc)
+Int32 hh4Get4Nbit(HH4Reader *hh4r, int n)
+{
+	int i;
+	Int32 value = 0;
+	for (i = 0; i < n; i++)
+		value = value << 4 | hh4Get4bit(hh4r);
+	return value;
+}
+
+Int32 *hh4Decode(OsecpuJitc *jitc)
 {
 	HH4Reader *hh4r = jitc->hh4r;
-	Int32 *dst = jitc->hh4dst, *dst1 = jitc->hh4dst1; 
+	Int32 *dst = jitc->hh4dst, *dst1 = jitc->hh4dst1;
 
 	jitc->errorCode = 0;
 	for (;;) {
@@ -84,7 +93,7 @@ Int32 *hh4Decode(Jitc *jitc)
 			goto err1;
 		Int32 opecode = hh4GetUnsigned(hh4r);
 		int len = instrLengthSimple(opecode), i;
-		if (len > 0 && opecode != 0x02) {
+		if (len > 0) {
 			if (dst + len > dst1)
 				goto err;
 			*dst = opecode;
@@ -93,31 +102,13 @@ Int32 *hh4Decode(Jitc *jitc)
 			dst += len;
 			continue;
 		}
-		if (opecode == 0x02) {
-			if (dst + 4 > dst1)
-				goto err;
-			*dst = opecode;
-			dst[1] = hh4GetSigned(hh4r);
-			dst[2] = hh4GetUnsigned(hh4r);
-			dst[3] = hh4GetUnsigned(hh4r);
-			dst += 4;
-			continue;
-		}
-		if (opecode == 0xfd) {
-			if (dst + 3 > dst1)
-				goto err;
-			*dst = opecode;
-			dst[1] = hh4GetUnsigned(hh4r);
-			dst[2] = hh4GetUnsigned(hh4r);
-			if (0 <= dst[2] && dst[2] <= 3)
-				jitc->dr[dst[2]] = dst[1];
-			dst += 3;
-			continue;
-		}
 		jitc->hh4dst = dst;
-		dst = ext_hh4Decode(jitc, opecode);
-		if (dst != jitc->hh4dst)
-			continue; // âΩÇ©èàóùÇ≈Ç´ÇΩÇÊÇ§Ç»ÇÃÇ≈éüÇ÷.
+		dst = hh4DecodeInteger(jitc, opecode);
+		if (dst != jitc->hh4dst) continue; // âΩÇ©èàóùÇ≈Ç´ÇΩÇÊÇ§Ç»ÇÃÇ≈éüÇ÷.
+		dst = hh4DecodeFloat(jitc, opecode);
+		if (dst != jitc->hh4dst) continue;
+		dst = hh4DecodeExtend(jitc, opecode);
+		if (dst != jitc->hh4dst) continue;
 
 		fprintf(stderr, "Error: hh4Decode: opecode=0x%02X\n", opecode); // ì‡ïîÉGÉâÅ[.
 		exit(1);

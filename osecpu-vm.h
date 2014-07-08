@@ -23,33 +23,38 @@ typedef struct _HH4Reader {
 	int half, len, errorCode;
 } HH4Reader;
 
-typedef struct _Jitc {
+typedef struct _OsecpuJitc {
 	Defines *defines;
 	const Int32 *src, *src1;
 	Int32 *dst, *dst1;
-	Int32 dr[4];
+	Int32 dr[4]; // Integer
 	int errorCode;
 	HH4Reader *hh4r;
 	const unsigned char *hh4src1;
 	Int32 *hh4dst, *hh4dst1;
-} Jitc;
+} OsecpuJitc;
 
-typedef struct _VM {
-	Int32 r[0x40];
-	int bit[0x40];
+typedef struct _OsecpuVm {
+	Int32 r[0x40]; // Integer
+	int bit[0x40]; // Integer
+	Int32 dr[4]; // Integer
+	double f[0x40]; // Float
+	int bitF[0x40]; // Float
 	PReg p[0x40];
 	const Int32 *ip, *ip1; /* instruction-pointer, program-counter */
-	Int32 dr[4];
 	const Defines *defines;
 	int errorCode;
-} VM;
+} OsecpuVm;
 
-// jitc.c : JITコンパイラ関係
+// osecpu-vm.c
+void OsecpuInit(); // 初期化.
 int instrLengthSimple(Int32 opecode); // 簡単な命令について命令長を返す.
+void instrLengthSimpleInit();
+void instrLengthSimpleInitTool(int *table, int ope0, int ope1); // 初期化支援.
 int instrLength(const Int32 *src, const Int32 *src1); // 命令長を返す.
-int jitcStep(Jitc *jitc); // OSECPU命令を一つだけ検証する. エラーがなければ0を返す.
-int jitcAll(Jitc *jitc);
 void jitcSetRetCode(int *pRC, int value);
+int jitcStep(OsecpuJitc *jitc); // OSECPU命令を一つだけ検証する. エラーがなければ0を返す.
+int jitcAll(OsecpuJitc *jitc);
 
 #define JITC_BAD_OPECODE		1
 #define JITC_BAD_BITS			2
@@ -61,10 +66,15 @@ void jitcSetRetCode(int *pRC, int value);
 #define JITC_DST_OVERRUN		8
 #define JITC_HH4_DST_OVERRUN	9
 #define JITC_HH4_BITLENGTH_OVER	10
+#define JITC_BAD_FLIMM_MODE		11
+#define JITC_BAD_FXX			12
 
-// exec.c : VMインタプリタ関係
-int execStep(VM *r); // 検証済みのOSECPU命令を一つだけ実行する.
-int execAll(VM *vm);
+void jitcStep_checkBits32(int *pRC, int bits);
+void jitcStep_checkRxx(int *pRC, int rxx);
+void jitcStep_checkRxxNotR3F(int *pRC, int rxx);
+
+int execStep(OsecpuVm *r); // 検証済みのOSECPU命令を一つだけ実行する.
+int execAll(OsecpuVm *vm);
 
 #define EXEC_BAD_BITS			1
 #define EXEC_BITS_RANGE_OVER	2
@@ -73,19 +83,34 @@ int execAll(VM *vm);
 #define EXEC_SRC_OVERRUN		5
 #define EXEC_ABORT_OPECODE_M1	0xffff
 
-// JITコンパイラとVMインタプリタの双方に必要な関数は、jitc.cのほうにおく.
+void execStep_checkBitsRange(Int32 value, int bits, OsecpuVm *vm);
 
 // hh4.c : hh4関係.
 void hh4Init(HH4Reader *hh4r, void *p, int half, void *p1);
 int hh4Get4bit(HH4Reader *hh4r);
 Int32 hh4GetUnsigned(HH4Reader *hh4r);
 Int32 hh4GetSigned(HH4Reader *hh4r);
-Int32 *hh4Decode(Jitc *jitc);
+Int32 *hh4Decode(OsecpuJitc *jitc);
 unsigned char *hh4StrToBin(unsigned char *src, unsigned char *src1, unsigned char *dst, unsigned char *dst1);
 
+// integer.c : 整数命令
+void OsecpuInitInteger();
+int instrLengthInteger(const Int32 *src, const Int32 *src1);
+Int32 *hh4DecodeInteger(OsecpuJitc *jitc, Int32 opecode);
+int jitcStepInteger(OsecpuJitc *jitc);
+void execStepInteger(OsecpuVm *vm);
+
+// float.c : 浮動小数点命令
+void OsecpuInitFloat();
+int instrLengthFloat(const Int32 *src, const Int32 *src1);
+Int32 *hh4DecodeFloat(OsecpuJitc *jitc, Int32 opecode);
+int jitcStepFloat(OsecpuJitc *jitc);
+void execStepFloat(OsecpuVm *vm);
+
 // extend.c : 拡張命令関係.
-Int32 *ext_hh4Decode(Jitc *jitc, Int32 opecode);
-int ext_instrLength(const Int32 *src, const Int32 *src1);
-int ext_jitcStep(Jitc *jitc);
-void ext_execStep(VM *vm);
+void OsecpuInitExtend();
+int instrLengthExtend(const Int32 *src, const Int32 *src1);
+Int32 *hh4DecodeExtend(OsecpuJitc *jitc, Int32 opecode);
+int jitcStepExtend(OsecpuJitc *jitc);
+void execStepExtend(OsecpuVm *vm);
 
