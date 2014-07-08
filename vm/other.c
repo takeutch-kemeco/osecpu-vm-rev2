@@ -95,7 +95,9 @@ int jitcStepOther(OsecpuJitc *jitc)
 		goto fin;
 	}
 	if (opecode == 0xfd) {
-		jitcSetHh4BufferSimple(jitc, 3);
+		ip[1] = hh4ReaderGetSigned(&jitc->hh4r);
+		ip[2] = hh4ReaderGetUnsigned(&jitc->hh4r);
+		jitc->instrLength = 3;
 		imm = ip[1]; r = ip[2];
  		if (0 <= r && r <= 3)
 			jitc->dr[r] = imm;

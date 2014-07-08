@@ -10,74 +10,59 @@ void jitcInitOther(OsecpuJitc *jitc)
 
 int jitcStepOther(OsecpuJitc *jitc)
 {
-	Int32 *ip = jitc->hh4Buffer;
+	Int32 *ip = jitc->srcBuffer;
 	Int32 opecode = ip[0], imm;
 	int bit, bit0, bit1, r, r0, r1, r2, p, typ, f;
 	int retcode = -1, *pRC = &retcode;
 	int i, j;
 	if (opecode == 0x00) { /* NOP */
-		jitcSetHh4BufferSimple(jitc, 1);
+		jitcSetSrcBufferSimple(jitc, 1);
 		goto fin;
 	}
 	if (opecode == 0x2f) {
-		jitcSetHh4BufferSimple(jitc, 2);
+		jitcSetSrcBufferSimple(jitc, 2);
 		i = ip[1];
 		jitc->prefix2f[i] = 1;
 		goto fin;
 	}
 	if (opecode == 0x30) {
-		jitcSetHh4BufferSimple(jitc, 6);
-		typ = ip[1]; bit0 = ip[2]; r = ip[3]; bit1 = ip[4]; p = ip[5];
-		jitcStep_checkBits32(pRC, bit0);
-		jitcStep_checkBits32(pRC, bit1);
+		jitcSetSrcBufferSimple(jitc, 6);
+	//	typ = ip[1]; bit0 = ip[2]; r = ip[3]; bit1 = ip[4]; p = ip[5];
 		goto fin;
 	}
 	if (opecode == 0x31) {
-		jitcSetHh4BufferSimple(jitc, 6);
-		p = ip[1]; typ = ip[2]; bit0 = ip[3]; r = ip[4]; bit1 = ip[5]; 
-		jitcStep_checkBits32(pRC, bit0);
-		jitcStep_checkBits32(pRC, bit1);
+		jitcSetSrcBufferSimple(jitc, 6);
+	//	p = ip[1]; typ = ip[2]; bit0 = ip[3]; r = ip[4]; bit1 = ip[5]; 
 		goto fin;
 	}
 	if (opecode == 0x32) {
-		jitcSetHh4BufferSimple(jitc, 6);
-		typ = ip[1]; bit0 = ip[2]; r = ip[3]; bit1 = ip[4]; p = ip[5];
-		jitcStep_checkBits32(pRC, bit0);
-		jitcStep_checkBits32(pRC, bit1);
+		jitcSetSrcBufferSimple(jitc, 6);
+	//	typ = ip[1]; bit0 = ip[2]; r = ip[3]; bit1 = ip[4]; p = ip[5];
 		goto fin;
 	}
 	if (opecode == 0x33) {
-		jitcSetHh4BufferSimple(jitc, 6);
-		p = ip[1]; typ = ip[2]; bit0 = ip[3]; r = ip[4]; bit1 = ip[5]; 
-		jitcStep_checkBits32(pRC, bit0);
-		jitcStep_checkBits32(pRC, bit1);
+		jitcSetSrcBufferSimple(jitc, 6);
+	//	p = ip[1]; typ = ip[2]; bit0 = ip[3]; r = ip[4]; bit1 = ip[5]; 
 		goto fin;
 	}
 	if (opecode == 0x3c) {
-		jitcSetHh4BufferSimple(jitc, 7);
+		jitcSetSrcBufferSimple(jitc, 7);
 		r = ip[1]; bit0 = ip[2]; p = ip[3]; f = ip[4]; bit1 = ip[5]; typ = ip[6];
 		if (typ != PTR_TYP_NULL)
 			jitcSetRetCode(pRC, JITC_UNSUPPORTED);
-		if (bit0 < 0 || bit0 > 32)
-			jitcSetRetCode(pRC, JITC_BAD_BITS);
-		if (bit1 != 0 && bit1 != 32 && bit1 != 64)
-			jitcSetRetCode(pRC, JITC_BAD_BITS);
 		goto fin;
 	}
 	if (opecode == 0x3d) {
-		jitcSetHh4BufferSimple(jitc, 7);
+		jitcSetSrcBufferSimple(jitc, 7);
 		r = ip[1]; bit0 = ip[2]; p = ip[3]; f = ip[4]; bit1 = ip[5]; typ = ip[6];
 		if (typ != PTR_TYP_NULL)
 			jitcSetRetCode(pRC, JITC_UNSUPPORTED);
-		if (bit0 < 0 || bit0 > 32)
-			jitcSetRetCode(pRC, JITC_BAD_BITS);
-		if (bit1 != 0 && bit1 != 32 && bit1 != 64)
-			jitcSetRetCode(pRC, JITC_BAD_BITS);
 		goto fin;
 	}
 	if (opecode == 0xfd) {
-		ip[1] = hh4ReaderGetSigned(&jitc->hh4r);
-		ip[2] = hh4ReaderGetUnsigned(&jitc->hh4r);
+		ip[1] = jitc->src[1];
+		ip[2] = jitc->src[2] & 0x00ffffff; 
+		jitc->src += 3;
 		jitc->instrLength = 3;
 		imm = ip[1]; r = ip[2];
  		if (0 <= r && r <= 3)
@@ -85,11 +70,10 @@ int jitcStepOther(OsecpuJitc *jitc)
 		goto fin;
 	}
 	if (opecode == 0xfe) {	// remark
-		jitcSetHh4BufferSimple(jitc, 3);
+		jitcSetSrcBufferSimple(jitc, 3);
 		imm = ip[1]; i = ip[2];
 		jitc->instrLength = 0; // 自前で処理するので、この値は0にする.
-		for (j = 0; j < i; j++)
-			hh4ReaderGetUnsigned(&jitc->hh4r); // 読み捨てる.
+		jitc->src += i * 2; // 読み飛ばす.
 		goto fin;
 	}
 	goto fin1;
@@ -103,7 +87,7 @@ fin1:
 int jitcAfterStepOther(OsecpuJitc *jitc)
 {
 	int i, retcode = 0;
-	if (jitc->hh4Buffer[0] != 0x2f) {
+	if (jitc->srcBuffer[0] != 0x2f) {
 		// 2Fプリフィクスフラグをクリアする.
 		for (i = 0; i < PREFIX2F_SIZE; i++)
 			jitc->prefix2f[i] = 0;

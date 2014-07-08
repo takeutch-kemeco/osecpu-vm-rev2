@@ -53,6 +53,7 @@ int disasm(struct Work *w);
 int appack(struct Work *w);
 int maklib(struct Work *w);
 int fcode(struct Work *w);
+int b32(struct Work *w);
 
 #define PUT_USAGE				-999
 #define	FLAGS_PUT_MANY_INFO		1
@@ -104,6 +105,7 @@ int main(int argc, const UCHAR **argv)
 		if (strcmp(cs, "appack") == 0) { r = appack(w); }
 		if (strcmp(cs, "maklib") == 0) { r = maklib(w); }
 		if (strcmp(cs, "fcode")  == 0) { r = fcode(w);  }
+		if (strcmp(cs, "b32")    == 0) { r = b32(w);    }
 	}
 	if (cs != NULL && strcmp(cs, "getint") == 0) {
 		cs = searchArg(w, "exp:");
@@ -179,7 +181,8 @@ int main(int argc, const UCHAR **argv)
 			 "  getint ver.0.06\n"
 			 "  osastr ver.0.00\n"
 			 "  binstr ver.0.00\n"
-			 "  fcode  ver.0.00"
+			 "  fcode  ver.0.00\n"
+			 "  b32    ver.0.00"  //115
 		);
 		r = 1;
 	}
@@ -4878,4 +4881,207 @@ end_op:
 	return 0;
 }
 
+int b32(struct Work *w)
+{
+	int i, j, k, l, *qi, *qi1;
+	char inf, buf4[4];
+	const UCHAR *p;
+	UCHAR *q;
+	if (w->ibuf[0] != 0x05 || w->ibuf[1] != 0xe2 || w->ibuf[2] != 0x00) {
+		fputs("input file format error.\n", stderr);
+		exit(1);
+	}
+	p = &(w->ibuf[3]);
+	inf = 0;
+	qi = (int *) w->obuf;
+	*qi++ = 0x05e200cf;
+	*qi++ = 0xee7ff188;
+	for (;;) {
+		if (p >= &(w->ibuf[w->isiz])) break;
+		i = appackSub3(&p, &inf, 1);
+		*qi++ = i | 0x76000000;
+		if (i == 0x01) {	// LB(uimm,opt);
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			continue;
+		}
+		if (i == 0x02) {	// LIMM(imm,r,bit);
+			*qi++ = 0xfffff788;
+			*qi++ = appackSub3(&p, &inf, 0);
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			i = appackSub3(&p, &inf, 1);
+			*qi++ = i | 0x76000000;
+			if (i > 32) {
+err_bit32:
+				fputs("bit > 32 error.\n", stderr);
+				exit(1);
+			}
+			continue;
+		}
+		if (i == 0x03) {	// PLIMM(uimm,p);
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			continue;
+		}
+		if (i == 0x04) {	// CND(r);
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			continue;
+		}
+		if (i == 0x08) {	// LMEM(p,typ,0,r,bit);
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			i = appackSub3(&p, &inf, 1);
+			if (!(0x02 <= i && i <= 0x15)) {
+				fputs("LMEM typ error.\n", stderr);
+				exit(1);
+			}
+			*qi++ = 0x76000006; // typ6 (SInt32)
+			i = appackSub3(&p, &inf, 1);
+			if (i != 0) {
+				fputs("LMEM addressing error.\n", stderr);
+				exit(1);
+			}
+			*qi++ = 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			i = appackSub3(&p, &inf, 1); *qi++ = i | 0x76000000; if (i > 32) goto err_bit32;
+			continue;
+		}
+		if (i == 0x09) {	// SMEM(r,bit,p,typ,0);
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			i = appackSub3(&p, &inf, 1); *qi++ = i | 0x76000000; if (i > 32) goto err_bit32;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			i = appackSub3(&p, &inf, 1);
+			if (!(0x02 <= i && i <= 0x15)) {
+				fputs("SMEM typ error.\n", stderr);
+				exit(1);
+			}
+			*qi++ = 0x76000006; // typ6 (SInt32)
+			i = appackSub3(&p, &inf, 1);
+			if (i != 0) {
+				fputs("SMEM addressing error.\n", stderr);
+				exit(1);
+			}
+			*qi++ = 0x76000000;
+			continue;
+		}
+		if (i == 0x0e) {	// PADD(p1,typ,r,bit,p0);
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			i = appackSub3(&p, &inf, 1);
+			if (!(0x02 <= i && i <= 0x15)) {
+				fputs("LMEM typ error.\n", stderr);
+				exit(1);
+			}
+			*qi++ = 0x76000006; // typ6 (SInt32)
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			i = appackSub3(&p, &inf, 1); *qi++ = i | 0x76000000; if (i > 32) goto err_bit32;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			continue;
+		}
+		if (0x10 <= i && i <= 0x16) {	// OR(r1,r2,r0,bit);‚È‚Ç.
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			i = appackSub3(&p, &inf, 1); *qi++ = i | 0x76000000; if (i > 32) goto err_bit32;
+			continue;
+		}
+		if (0x18 <= i && i <= 0x1b) {	// SHL(r1,r2,r0,bit);‚È‚Ç.
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			i = appackSub3(&p, &inf, 1); *qi++ = i | 0x76000000; if (i > 32) goto err_bit32;
+			continue;
+		}
+		if (i == 0x1e) {	// PCP(p1,p0);
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			continue;
+		}
+		if (0x20 <= i && i <= 0x27) {	// CMPcc(r1,r2,bit1,r0,bit0);‚È‚Ç.
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			i = appackSub3(&p, &inf, 1); *qi++ = i | 0x76000000; if (i > 32) goto err_bit32;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			i = appackSub3(&p, &inf, 1); *qi++ = i | 0x76000000; if (i > 32) goto err_bit32;
+			continue;
+		}
+		if (i == 0x2e) {	// data(typ, len, ...);
+			int usgn = 0, bitlen = 0, bitbuf = 0, bitbuflen;
+			i = appackSub3(&p, &inf, 1);
+			j = appackSub3(&p, &inf, 1);
+			if (0x02 <= i && i <= 0x15) {
+				usgn = i & 1;
+				bitlen = db2binDataWidth(i);
+			}
+			if (bitlen > 0) {
+				*qi++ = 0x76000006; // typ6 (SInt32)
+				*qi++ = j | 0x76000000;
+				bitbuflen = 0;
+				for (k = 0; k < j; k++) {
+					i = 0;
+					for (l = 0; l < bitlen; l++) {
+						if (bitbuflen <= 0) {
+							bitbuf = appackSub2(&p, &inf);
+							bitbuflen = 4;
+						}
+						i = i << 1 | ((bitbuf >> 3) & 1);
+						bitbuf <<= 1;
+						bitbuflen--;
+					}
+					if (usgn == 0 && bitlen < 32) {
+						if ((i & (1 << (bitlen - 1))) != 0)
+							i -= 1 << bitlen;
+					}
+					*qi++ = i;
+				}
+				continue;
+			}
+			fprintf(stderr, "internal error: op=0x2e, typ=0x%02x\n", i);
+			exit(1);
+		}
+		if (0x3c <= i && i <= 0x3d) {	// ENTER(rn,bit0,pn,fn,bit1,0);‚È‚Ç.
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			i = appackSub3(&p, &inf, 1);
+			if (i != 0) {
+				fputs("ENTER/LEAVE typ error.\n", stderr);
+				exit(1);
+			}
+			*qi++ = 0x76000000;
+			continue;
+		}
+		if (i == 0xfd) {	// LIDR(imm,r);
+			*qi++ = 0xfffff788;
+			*qi++ = appackSub3(&p, &inf, 0);
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			continue;
+		}
+		if (i == 0xfe) {
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			i = appackSub3(&p, &inf, 1);
+			*qi++ = i | 0x76000000;
+			for (j = 0; j < i; j++) {
+				*qi++ = 0xfffff788;
+				*qi++ = appackSub3(&p, &inf, 0);
+			}
+			continue;
+		}
+		fprintf(stderr, "internal error: op=0x%02x\n", i);
+		exit(1);
+	}
+	qi1 = qi;
+	for (qi = (int *) w->obuf; qi < qi1; qi++) {
+		q = (UCHAR *) qi;
+		buf4[0] = q[0];
+		buf4[1] = q[1];
+		buf4[2] = q[2];
+		buf4[3] = q[3];
+		q[0] = buf4[3];
+		q[1] = buf4[2];
+		q[2] = buf4[1];
+		q[3] = buf4[0];
+	}
+	return putBuf(w->argOut, w->obuf, (UCHAR *) qi1);
+}
 

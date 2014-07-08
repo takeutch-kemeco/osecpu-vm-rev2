@@ -42,7 +42,7 @@ int *keybuf, keybuf_r, keybuf_w, keybuf_c;
 
 void putKeybuf(int i)
 {
-	if ((i & 0x3e3effff) == ('D' | 0x00060000) || (i & 0x3e3effff) == ('F' | 0x00060000)) {
+	if ((i & 0x3e3effff) == ('D' | 0x00060000)) {
 		if (toDebugMonitor != 0)
 			*toDebugMonitor = 1;
 	} else {

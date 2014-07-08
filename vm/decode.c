@@ -36,11 +36,14 @@ int decode_upx_getTmpBit(DecodeUpxStr *s)
 int decode_upx(const UCHAR *p, const UCHAR *p1, UCHAR *q, UCHAR *q1)
 {
 	DecodeUpxStr s;
-	int i, dis;
+	int i = p1 - p, dis;
 	UCHAR *q0 = q;
-	i = p1 - p;
-	memmove(q1 - 8 - i, p, i);
-	s.p = q1 - 8 - i;
+	UCHAR *pp0 = q1 - 8 - i;
+	Hh4Reader hh4r;
+	memmove(pp0, p, i);
+	hh4ReaderInit(&hh4r, pp0, 0, q1 - 8, 0);
+	i = hh4ReaderGetUnsigned(&hh4r);
+	s.p = (UCHAR *) hh4r.p.p;
 	dis |= -1;
 	s.bitBufLen &= 0;
 	goto l1;

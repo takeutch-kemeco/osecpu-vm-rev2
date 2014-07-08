@@ -13,6 +13,8 @@
 #define api_inkey(_i, mod)							DB(0xfc,0xfe,0x10); R30=0x000d; R31=mod; PCALL(P2F); _i=R30 
 #define api_openWin(xsiz, ysiz)						DB(0xfc,0xfe,0x10); R30=0x0010; R31=xsiz; R32=ysiz; PCALL(P2F)
 
+#define api_end()									api_sleep(0, -1)
+
 #define junkApi_flushWin(xsiz, ysiz, x0, y0)		DB(0xfe,0x05,0x01); DDBE(0x0011); R30=0xff41; R31=xsiz; R32=ysiz; R33=x0; R34=y0; PCALL(P2F)
 #define junkApi_drawString0(mod, xsiz, ysiz, x0, y0, c, s)	DB(0xfe,0x05,0x01); DDBE(0x0006); R30=0xff48; R31=mod; R32=xsiz; R33=ysiz; R34=x0; R35=y0; R36=c; DB(0xff,0x00,0x00); DB%(s,0x00); PCALL(P2F) 
 #define junkApi_drawString3(mod, xsiz, ysiz, x0, y0, c, s)	DB(0xfe,0x05,0x01); DDBE(0x0006); R30=0xff48; R31=mod; R32=xsiz; R33=ysiz; R34=x0; R35=y0; R36=c; DB(0xff,0x00,0x03); DB%(s,0x00); PCALL(P2F) 

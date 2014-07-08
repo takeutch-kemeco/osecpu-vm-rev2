@@ -1,0 +1,20 @@
+#include "osecpu_ask.h"
+
+#define L_func      LOCAL(0)
+LOCALLABELS(1);
+
+#define func(_r, a, b)  R30=a; R31=b; CALL(L_func); _r=R30
+
+    // main
+    do {
+        func(R00, 2, 3);
+        api_fillRect(MODE_COL3, R00, 16, 16, 0, 0);
+    }
+	api_end();
+
+beginFunc(L_func);
+    do {
+        Int32s a:R30, b:R31, r:R30;
+        r = a + b;
+    }
+endFunc();
