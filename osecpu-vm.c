@@ -2,17 +2,6 @@
 
 // init関係.
 
-void osecpuInit()
-{
-	instrLengthSimpleInit();
-
-	osecpuInitInteger();
-	osecpuInitPointer();
-	osecpuInitFloat();
-	osecpuInitExtend();
-	return;
-}
-
 void definesInit(Defines *def)
 {
 	int i;
@@ -21,62 +10,103 @@ void definesInit(Defines *def)
 	return;
 }
 
-// instrLength関係.
+// hh4関係.
 
-#define INSTRLEN_TABLE_SIZE		0x100
-
-static int *instrLengthSimpleTable; // 単純固定長命令用のテーブル. パラメータはすべてunsigned.
-
-int instrLengthSimple(Int32 opecode)
+void hh4ReaderInit(Hh4Reader *hh4r, void *p, int half, void *p1, int half1)
 {
-	int retcode = 0;
-	if (0x00 <= opecode && opecode < INSTRLEN_TABLE_SIZE)
-		retcode = instrLengthSimpleTable[opecode];
-	return retcode;
+	hh4r->p.p = p;
+	hh4r->p.half = half;
+	hh4r->p1.p = p1;
+	hh4r->p1.half = half1;
+	hh4r->errorCode = 0;
+	return;
 }
 
-void instrLengthSimpleInit()
+int hh4ReaderEnd(Hh4Reader *hh4r)
+{
+	int retCode = 0;
+	if (hh4r->p.p > hh4r->p1.p)
+		retCode = 1;
+	if (hh4r->p.p == hh4r->p1.p && hh4r->p.half >= hh4r->p1.half)
+		retCode = 1;
+	return retCode;
+}
+
+int hh4ReaderGet4bit(Hh4Reader *hh4r)
+{
+	int value = 0;
+	if (hh4ReaderEnd(hh4r) != 0) {
+		hh4r->errorCode = 1;
+		goto fin;
+	}
+	value = *hh4r->p.p;
+	if (hh4r->p.half == 0) {
+		value >>= 4;
+		hh4r->p.half = 1;
+	} else {
+		value &= 0xf;
+		hh4r->p.p++;
+		hh4r->p.half = 0;
+	}
+fin:
+	return value;
+}
+
+Int32 hh4ReaderGetUnsigned(Hh4Reader *hh4r)
+{
+	int i = hh4ReaderGet4bit(hh4r), len = 3;
+	if (i <= 0x6)
+		;	// 0xxx型
+	else if (i == 0x7) {
+		len = hh4ReaderGetUnsigned(hh4r) * 4;
+		if (len > 32) {
+			hh4r->errorCode = 1;
+			len = 0;
+		}
+		int j;
+		i = 0;
+		for (j = len; j > 0; j -= 4) {
+			i <<= 4;
+			i |= hh4ReaderGet4bit(hh4r);
+		}
+	} else if (i <= 0xb) {	// 10xx_xxxx型
+		i = i << 4 | hh4ReaderGet4bit(hh4r);
+		len = 6;
+		i &= 0x3f;
+	} else if (i <= 0xd) {	// 110x_xxxx_xxxx型
+		i = i << 8 | hh4ReaderGet4bit(hh4r) << 4;
+		i |= hh4ReaderGet4bit(hh4r);
+		len = 9;
+		i &= 0x1ff;
+	} else if (i == 0xe) {	// 1110_xxxx_xxxx_xxxx型
+		i = hh4ReaderGet4bit(hh4r) << 8;
+		i |= hh4ReaderGet4bit(hh4r) << 4;
+		i |= hh4ReaderGet4bit(hh4r);
+		len = 12;
+	} else { // 0x0fは読み飛ばす.
+		i = hh4ReaderGetUnsigned(hh4r);
+		len = hh4r->length;
+	}
+	hh4r->length = len;
+	return i;
+}
+
+Int32 hh4ReaderGetSigned(Hh4Reader *hh4r)
+{
+	Int32 i = hh4ReaderGetUnsigned(hh4r);
+	int len = hh4r->length;
+	if (0 < len && len <= 31 && i >= (1 << (len - 1)))
+		i -= 1 << len; // MSBが1なら引き算して負数にする.
+	return i;
+}
+
+Int32 hh4ReaderGet4Nbit(Hh4Reader *hh4r, int n)
 {
 	int i;
-	instrLengthSimpleTable = malloc(INSTRLEN_TABLE_SIZE * sizeof (int));
-	for (i = 0; i < INSTRLEN_TABLE_SIZE; i++)
-		instrLengthSimpleTable[i] = 0;
-	return;
-}
-
-void instrLengthSimpleInitTool(int *table, int ope0, int ope1)
-{
-	int i, len;
-	if (ope1 >= INSTRLEN_TABLE_SIZE) {
-		fprintf(stderr, "Error: instrLengthSimpleInitTool: ope1=0x%02X\n", ope1); // 内部エラー.
-		exit(1);
-	}
-	for (i = ope0; i <= ope1; i++) {
-		len = table[i - ope0];
-		if (len > 0)
-			instrLengthSimpleTable[i] = len;
-	}
-	return;
-}
-
-int instrLength(const Int32 *src, const Int32 *src1)
-{
-	Int32 opecode = src[0];
-	int retcode = instrLengthSimple(opecode);
-	if (retcode > 0) goto fin;
-	retcode = instrLengthInteger(src, src1);
-	if (retcode > 0) goto fin;
-	retcode = instrLengthPointer(src, src1);
-	if (retcode > 0) goto fin;
-	retcode = instrLengthFloat(src, src1);
-	if (retcode > 0) goto fin;
-	retcode = instrLengthExtend(src, src1);
-	if (retcode > 0) goto fin;
-	retcode = - JITC_BAD_OPECODE;
-fin:
-	if (src + retcode > src1)
-		retcode = - JITC_SRC_OVERRUN;
-	return retcode;
+	Int32 value = 0;
+	for (i = 0; i < n; i++)
+		value = value << 4 | hh4ReaderGet4bit(hh4r);
+	return value;
 }
 
 // jitc関係.
@@ -88,6 +118,10 @@ void jitcInitDstLogSetPhase(OsecpuJitc *jitc, int phase)
 		jitc->dstLog[i] = NULL;
 	jitc->dstLogIndex = 0;
 	jitc->phase = phase;
+	jitcInitInteger(jitc);
+	jitcInitPointer(jitc);
+	jitcInitFloat(jitc);
+	jitcInitExtend(jitc);
 	return;
 }
 
@@ -98,40 +132,41 @@ void jitcSetRetCode(int *pRC, int value)
 	return;
 }
 
+void jitcSetHh4BufferSimple(OsecpuJitc *jitc, int length)
+{
+	int i;
+	for (i = 1; i < length; i++)
+		jitc->hh4Buffer[i] = hh4ReaderGetUnsigned(&jitc->hh4r);
+	jitc->instrLength = length;
+	return;
+}
+
 int jitcStep(OsecpuJitc *jitc)
 {
-	const Int32 *ip = jitc->src;
-	Int32 opecode = ip[0], imm;
-	int bit, bit0, bit1, r, r0, r1, r2;
-	int retcode = -1, *pRC = &retcode, length = instrLength(ip, jitc->src1);
-	int i;
-	if (length < 0) {
-		jitcSetRetCode(pRC, - length);
-		goto fin;
-	}
-	retcode = jitcStepInteger(jitc);
-	if (retcode >= 0) goto fin;
-	retcode = jitcStepPointer(jitc);
-	if (retcode >= 0) goto fin;
-	retcode = jitcStepFloat(jitc);
-	if (retcode >= 0) goto fin;
-	retcode = jitcStepExtend(jitc);
-	if (retcode >= 0) goto fin;
+	int retcode = -1, *pRC = &retcode, i;
+	jitc->hh4Buffer[0] = hh4ReaderGetUnsigned(&jitc->hh4r);
+	retcode = jitcStepInteger(jitc);	if (retcode >= 0) goto fin;
+	retcode = jitcStepPointer(jitc);	if (retcode >= 0) goto fin;
+	retcode = jitcStepFloat(jitc);		if (retcode >= 0) goto fin;
+	retcode = jitcStepExtend(jitc);		if (retcode >= 0) goto fin;
 	retcode = JITC_BAD_OPECODE;
 fin:
+	if (jitc->hh4r.errorCode != 0)
+		jitcSetRetCode(pRC, JITC_SRC_OVERRUN);
+	if (jitc->dst + jitc->instrLength > jitc->dst1)
+		jitcSetRetCode(pRC, JITC_DST_OVERRUN);
 	if (retcode != 0)
 		goto fin1;
-	if (jitc->dst + length > jitc->dst1) {
-		retcode = JITC_DST_OVERRUN;
-		goto fin1;
-	}
-	for (i = 0; i < length; i++)
-		jitc->dst[i] = ip[i];
+	for (i = 0; i < jitc->instrLength; i++)
+		jitc->dst[i] = jitc->hh4Buffer[i];
+	jitcAfterStepInteger(jitc);
+	jitcAfterStepPointer(jitc);
+	jitcAfterStepFloat(jitc);
+	jitcAfterStepExtend(jitc);
 	i = jitc->dstLogIndex;
 	jitc->dstLog[i] = jitc->dst; // エラーのなかった命令は記録する.
 	jitc->dstLogIndex = (i + 1) % JITC_DSTLOG_SIZE;
-	jitc->src += length;
-	jitc->dst += length;
+	jitc->dst += jitc->instrLength;
 fin1:
 	jitc->errorCode = retcode;
 	return retcode;
@@ -139,23 +174,24 @@ fin1:
 
 int jitcAll(OsecpuJitc *jitc)
 {
-	const Int32 *src0 = jitc->src;
+	Hh4ReaderPointer src0 = jitc->hh4r.p;
 	Int32 *dst0 = jitc->dst;
 	jitcInitDstLogSetPhase(jitc, 0);
 	for (;;) {
 		// 理想は適当な上限を決めて、休み休みでやるべきかもしれない.
 		jitcStep(jitc);
 		if (jitc->errorCode != 0) break;
+		if (hh4ReaderEnd(&jitc->hh4r) != 0) break;
 	}
-	if (jitc->errorCode != JITC_SRC_OVERRUN)
-		goto fin;
-	jitc->src = src0;
+	if (jitc->errorCode != 0) goto fin;
+	jitc->hh4r.p = src0;
 	jitc->dst = dst0;
 	jitcInitDstLogSetPhase(jitc, 1);
 	for (;;) {
 		// 理想は適当な上限を決めて、休み休みでやるべきかもしれない.
 		jitcStep(jitc);
 		if (jitc->errorCode != 0) break;
+		if (hh4ReaderEnd(&jitc->hh4r) != 0) break;
 	}
 fin:
 	return jitc->errorCode;
@@ -188,14 +224,10 @@ int execStep(OsecpuVm *vm)
 {
 	const Int32 *ip = vm->ip;
 	vm->errorCode = 0;
-	execStepInteger(vm);
-	if (ip != vm->ip) goto fin;
-	execStepPointer(vm);
-	if (ip != vm->ip) goto fin;
-	execStepFloat(vm);
-	if (ip != vm->ip) goto fin;
-	execStepExtend(vm);
-	if (ip != vm->ip) goto fin;
+	execStepInteger(vm);	if (ip != vm->ip) goto fin;
+	execStepPointer(vm);	if (ip != vm->ip) goto fin;
+	execStepFloat(vm);		if (ip != vm->ip) goto fin;
+	execStepExtend(vm);		if (ip != vm->ip) goto fin;
 	if (*ip == -1) {
 		vm->errorCode = EXEC_ABORT_OPECODE_M1; // デバッグ用.
 		goto fin;
@@ -226,5 +258,41 @@ void execStep_checkBitsRange(Int32 value, int bits, OsecpuVm *vm)
 	if (!(min <= value && value <= max))
 		jitcSetRetCode(&vm->errorCode, EXEC_BITS_RANGE_OVER);
 	return;
+}
+
+// 関連ツール関数.
+
+unsigned char *hh4StrToBin(unsigned char *src, unsigned char *src1, unsigned char *dst, unsigned char *dst1)
+{
+	int half = 0, c, d;
+	for (;;) {
+		if (src1 != NULL && src >= src1) break;
+		if (*src == '\0') break;
+		c = *src++;
+		d = -1;
+		if ('0' <= c && c <= '9')
+			d = c - '0';
+		if ('A' <= c && c <= 'F')
+			d = c - ('A' - 10);
+		if ('a' <= c && c <= 'f')
+			d = c - ('a' - 10);
+		if (d >= 0) {
+			if (half == 0) {
+				if (dst1 != NULL && dst >= dst1) {
+					dst = NULL;
+					break;
+				}
+				*dst = d << 4;
+				half = 1;
+			} else {
+				*dst |= d;
+				dst++;
+				half = 0;
+			}
+		}
+	}
+	if (dst != NULL && half != 0)
+		dst++;
+	return dst;
 }
 

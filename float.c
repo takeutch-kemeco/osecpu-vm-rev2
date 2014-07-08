@@ -2,78 +2,9 @@
 
 // ïÇìÆè¨êîì_ñΩóﬂ: 40-43, 48-4D, 50-53
 
-void osecpuInitFloat()
+void jitcInitFloat(OsecpuJitc *jitc)
 {
-	static int table[] = {
-		0, 5, 5, 5, 0, 0, 0, 0, 6, 6, 6, 6, 6, 6, 0, 0, // 4x
-		5, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0  // 5x
-	};
-	instrLengthSimpleInitTool(table, 0x40, 0x5f);
 	return;
-}
-
-int instrLengthFloat(const Int32 *src, const Int32 *src1)
-// instrLengthSimpleInitTool()Ç≈ìoò^ÇµÇƒÇ¢Ç»Ç¢Ç‡ÇÃÇæÇØÇ…îΩâûÇ∑ÇÍÇŒÇÊÇ¢.
-{
-	Int32 opecode = src[0];
-	int retcode = 0;
-	if (opecode == 0x40) {
-		if (src[1] == 0) retcode = 5; // 40, imm-typ(0), imm, f, bit.
-		if (src[1] == 1) retcode = 5; // 40, imm-typ(1), imm-f32, f, bit.
-		if (src[1] == 2) retcode = 6; // 40, imm-typ(2), imm-f64, f, bit.
-	}
-	return retcode;
-}
-
-Int32 *hh4DecodeFloat(OsecpuJitc *jitc, Int32 opecode)
-// instrLengthSimpleInitTool()Ç≈ìoò^ÇµÇƒÇ¢Ç»Ç¢Ç‡ÇÃÇæÇØÇ…îΩâûÇ∑ÇÍÇŒÇÊÇ¢.
-{
-	HH4Reader *hh4r = jitc->hh4r;
-	Int32 *dst = jitc->hh4dst, *dst1 = jitc->hh4dst1;
-	int i;
-	if (opecode == 0x40) {
-		i = hh4GetUnsigned(hh4r);
-		if (i == 0) {
- 			if (dst + 5 > dst1)
-				goto err;
-			*dst = opecode;
-			dst[1] = i; // imm-typ(0)
-			dst[2] = hh4GetSigned(hh4r); // imm
-			dst[3] = hh4GetUnsigned(hh4r); // f
-			dst[4] = hh4GetUnsigned(hh4r); // bit
-			dst += 5;
-			goto fin;
-		}
-		if (i == 1) {
-			if (dst + 5 > dst1)
-				goto err;
-			*dst = opecode;
-			dst[1] = i; // imm-typ(1)
-			dst[2] = hh4Get4Nbit(hh4r, 32 / 4); // imm
-			dst[3] = hh4GetUnsigned(hh4r); // f
-			dst[4] = hh4GetUnsigned(hh4r); // bit
-			dst += 5;
-			goto fin;
-		}
-		if (i == 2) {
-			if (dst + 6 > dst1)
-				goto err;
-			*dst = opecode;
-			dst[1] = i; // imm-typ(2)
-			dst[2] = hh4Get4Nbit(hh4r, 32 / 4); // imm-high
-			dst[3] = hh4Get4Nbit(hh4r, 32 / 4); // imm-low
-			dst[4] = hh4GetUnsigned(hh4r); // f
-			dst[5] = hh4GetUnsigned(hh4r); // bit
-			dst += 6;
-			goto fin;
-		}
-	}
-fin:
-	jitc->dst = dst;
-	return dst;
-err:
-	jitc->errorCode = JITC_HH4_DST_OVERRUN;
-	return dst;
 }
 
 void jitcStep_checkFxx(int *pRC, int fxx)
@@ -99,16 +30,34 @@ void jitcStep_checkBitsF(int *pRC, int bit)
 
 int jitcStepFloat(OsecpuJitc *jitc)
 {
-	const Int32 *ip = jitc->src;
+	Int32 *ip = jitc->hh4Buffer;
 	Int32 opecode = ip[0];
 	int bit, bit0, bit1, r, f, f0, f1, f2;
 	int retcode = -1, *pRC = &retcode;
 	if (opecode == 0x40) {	// FLIMM
-		if (ip[1] == 0 || ip[1] == 1) {
+		ip[1] = hh4ReaderGetUnsigned(&jitc->hh4r);
+		if (ip[1] == 0) {
+			ip[2] = hh4ReaderGetSigned(&jitc->hh4r); // imm
+			ip[3] = hh4ReaderGetUnsigned(&jitc->hh4r); // f
+			ip[4] = hh4ReaderGetUnsigned(&jitc->hh4r); // bit
+			jitc->instrLength = 5;
+			f = ip[3]; bit = ip[4];
+			jitcStep_checkBitsF(pRC, bit);
+			jitcStep_checkFxx(pRC, f);
+		} else if (ip[1] == 1) {
+			ip[2] = hh4ReaderGet4Nbit(&jitc->hh4r, 32 / 4); // imm
+			ip[3] = hh4ReaderGetUnsigned(&jitc->hh4r); // f
+			ip[4] = hh4ReaderGetUnsigned(&jitc->hh4r); // bit
+			jitc->instrLength = 5;
 			f = ip[3]; bit = ip[4];
 			jitcStep_checkBitsF(pRC, bit);
 			jitcStep_checkFxx(pRC, f);
 		} else if (ip[1] == 2) {
+			ip[2] = hh4ReaderGet4Nbit(&jitc->hh4r, 32 / 4); // imm-high
+			ip[3] = hh4ReaderGet4Nbit(&jitc->hh4r, 32 / 4); // imm-low
+			ip[4] = hh4ReaderGetUnsigned(&jitc->hh4r); // f
+			ip[5] = hh4ReaderGetUnsigned(&jitc->hh4r); // bit
+			jitc->instrLength = 6;
 			f = ip[4]; bit = ip[5];
 			jitcStep_checkBitsF(pRC, bit);
 			jitcStep_checkFxx(pRC, f);
@@ -117,6 +66,7 @@ int jitcStepFloat(OsecpuJitc *jitc)
 		goto fin;
 	}
 	if (opecode == 0x41) {	// FCP
+		jitcSetHh4BufferSimple(jitc, 5);
 		f1 = ip[1]; bit1 = ip[2]; f0 = ip[3]; bit0 = ip[4];
 		jitcStep_checkBitsF(pRC, bit1);
 		jitcStep_checkFxx(pRC, f1);
@@ -125,6 +75,7 @@ int jitcStepFloat(OsecpuJitc *jitc)
 		goto fin; // bit0Ç∆bit1ÇÃëÂè¨ä÷åWÇ…êßñÒÇÕÇ»Ç¢. bit0>bit1ÇÃèÍçáÇÕê∏ìxÇägí£Ç∑ÇÈÇ±Ç∆Ç…Ç»ÇÈ.
 	}
 	if (opecode == 0x42) {	// CNVIF
+		jitcSetHh4BufferSimple(jitc, 5);
 		r = ip[1]; bit1 = ip[2]; f = ip[3]; bit0 = ip[4];
 		jitcStep_checkBits32(pRC, bit1);
 		jitcStep_checkRxx(pRC, r);
@@ -133,6 +84,7 @@ int jitcStepFloat(OsecpuJitc *jitc)
 		goto fin;
 	}
 	if (opecode == 0x43) {	// CNVFI
+		jitcSetHh4BufferSimple(jitc, 5);
 		f = ip[1]; bit1 = ip[2]; r = ip[3]; bit0 = ip[4];
 		jitcStep_checkBitsF(pRC, bit1);
 		jitcStep_checkFxx(pRC, f);
@@ -141,6 +93,7 @@ int jitcStepFloat(OsecpuJitc *jitc)
 		goto fin;
 	}
 	if (0x48 <= opecode && opecode <= 0x4d) {
+		jitcSetHh4BufferSimple(jitc, 6);
 		f1 = ip[1]; f2 = ip[2]; bit1 = ip[3]; r = ip[4]; bit0 = ip[5];
 		jitcStep_checkFxx(pRC, f1);
 		jitcStep_checkFxx(pRC, f2);
@@ -150,6 +103,7 @@ int jitcStepFloat(OsecpuJitc *jitc)
 		goto fin;
 	}
 	if (0x50 <= opecode && opecode <= 0x53) {
+		jitcSetHh4BufferSimple(jitc, 5);
 		f1 = ip[1]; f2 = ip[2]; f0 = ip[3]; bit = ip[4];
 		jitcStep_checkFxx(pRC, f1);
 		jitcStep_checkFxx(pRC, f2);
@@ -164,6 +118,11 @@ fin:
 		retcode = 0;
 fin1:
 	return retcode;
+}
+
+void jitcAfterStepFloat(OsecpuJitc *jitc)
+{
+	return;
 }
 
 void execStepFloat(OsecpuVm *vm)

@@ -2,89 +2,48 @@
 
 // ®”–½—ß: 02, 10-16, 18-1B, 20-27, FD
 
-void osecpuInitInteger()
+void jitcInitInteger(OsecpuJitc *jitc)
 {
-	static int table[] = {
-		1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x
-		5, 5, 5, 5, 5, 5, 5, 0, 5, 5, 5, 5, 0, 0, 0, 0, // 1x
-		6, 6, 6, 6, 6, 6, 6, 6, 0, 0, 0, 0, 0, 0, 0, 0  // 2x
-	};
-	instrLengthSimpleInitTool(table, 0x00, 0x2f);
+	jitc->ope04 = NULL;
 	return;
-}
-
-int instrLengthInteger(const Int32 *src, const Int32 *src1)
-// instrLengthSimpleInitTool()‚Å“o˜^‚µ‚Ä‚¢‚È‚¢‚à‚Ì‚¾‚¯‚É”½‰ž‚·‚ê‚Î‚æ‚¢.
-{
-	Int32 opecode = src[0];
-	int retcode = 0;
-	if (opecode == 0x02)
-		retcode = 4;
-	if (opecode == 0xfd)
-		retcode = 3;
-	return retcode;
-}
-
-Int32 *hh4DecodeInteger(OsecpuJitc *jitc, Int32 opecode)
-// instrLengthSimpleInitTool()‚Å“o˜^‚µ‚Ä‚¢‚È‚¢‚à‚Ì‚¾‚¯‚É”½‰ž‚·‚ê‚Î‚æ‚¢.
-{
-	HH4Reader *hh4r = jitc->hh4r;
-	Int32 *dst = jitc->hh4dst, *dst1 = jitc->hh4dst1;
-	int i, v;
-	if (opecode == 0x02) {
-		if (dst + 4 > dst1)
-			goto err;
-		*dst = opecode;
-		dst[1] = hh4GetSigned(hh4r);
-		dst[2] = hh4GetUnsigned(hh4r);
-		dst[3] = hh4GetUnsigned(hh4r);
-		dst += 4;
-		goto fin;
-	}
-	if (opecode == 0xfd) {
-		if (dst + 3 > dst1)
-			goto err;
-		*dst = opecode;
-		dst[1] = v = hh4GetUnsigned(hh4r);
-		dst[2] = i = hh4GetUnsigned(hh4r);
-		if (0 <= i && i <= 3)
-			jitc->dr[i] = v;
-		dst += 3;
-		goto fin;
-	}
-fin:
-	jitc->dst = dst;
-	return dst;
-err:
-	jitc->errorCode = JITC_HH4_DST_OVERRUN;
-	return dst;
 }
 
 int jitcStepInteger(OsecpuJitc *jitc)
 {
-	const Int32 *ip = jitc->src;
+	Int32 *ip = jitc->hh4Buffer;
 	Int32 opecode = ip[0], imm;
 	int bit, bit0, bit1, r, r0, r1, r2;
 	int retcode = -1, *pRC = &retcode;
 	int i;
 	if (opecode == 0x00) { /* NOP */
+		jitcSetHh4BufferSimple(jitc, 1);
 		goto fin;
 	}
 	if (opecode == 0x02) { /* LIMM(imm, Rxx, bits); */
-		imm = ip[1]; r = ip[2]; bit = ip[3]; 
+		ip[1] = hh4ReaderGetSigned(&jitc->hh4r);
+		ip[2] = hh4ReaderGetUnsigned(&jitc->hh4r);
+		ip[3] = hh4ReaderGetUnsigned(&jitc->hh4r);
+		jitc->instrLength = 4;
+		imm = ip[1]; r = ip[2]; bit = ip[3];
 		jitcStep_checkBits32(pRC, bit);
 		jitcStep_checkRxx(pRC, r);
 		goto fin;
 	}
 	if (opecode == 0x04) { /* CND(Rxx); */
+		jitcSetHh4BufferSimple(jitc, 2);
+		ip[2] = 0; // skip‚·‚é–½—ß’·.
+		jitc->instrLength = 3;
 		r = ip[1];
 		jitcStep_checkRxx(pRC, r);
-		i = ip[2]; // ŽŸ‚Ìopecode.
-		if (i == 0x00 || i == 0x01 || i == 0x04)
+		Hh4Reader hh4r = jitc->hh4r; // ‚±‚ê‚ðŽg‚Á‚Ä‚àjitc‚Ìhh4r‚Íi‚Ü‚È‚¢.
+		i = hh4ReaderGetUnsigned(&hh4r); // ŽŸ‚Ìopecode.
+		if (i == 0x00 || i == 0x01 || i == 0x04 || i == 0x2e)
 			jitcSetRetCode(pRC, JITC_BAD_CND);
+		jitc->ope04 = jitc->dst;
 		goto fin;
 	}
 	if (0x10 <= opecode && opecode <= 0x1b && opecode != 0x13 && opecode != 0x17) {
+		jitcSetHh4BufferSimple(jitc, 5);
 		r1 = ip[1]; r2 = ip[2]; r0 = ip[3]; bit = ip[4];
 		jitcStep_checkRxx(pRC, r1);
 		jitcStep_checkRxx(pRC, r2);
@@ -93,6 +52,7 @@ int jitcStepInteger(OsecpuJitc *jitc)
 		goto fin;
 	}
 	if (opecode == 0x13) {	// SBX.
+		jitcSetHh4BufferSimple(jitc, 5);
 		r1 = ip[1]; r2 = ip[2]; r0 = ip[3]; bit = ip[4];
 		jitcStep_checkRxxNotR3F(pRC, r1);
 		jitcStep_checkRxxNotR3F(pRC, r0);
@@ -102,6 +62,7 @@ int jitcStepInteger(OsecpuJitc *jitc)
 		goto fin;
 	}
 	if (0x20 <= opecode && opecode <= 0x27) {
+		jitcSetHh4BufferSimple(jitc, 6);
 		r1 = ip[1]; r2 = ip[2]; bit1 = ip[3]; r0 = ip[4]; bit0 = ip[5];
 		jitcStep_checkRxx(pRC, r1);
 		jitcStep_checkRxx(pRC, r2);
@@ -111,6 +72,7 @@ int jitcStepInteger(OsecpuJitc *jitc)
 		goto fin;
 	}
 	if (opecode == 0xfd) {
+		jitcSetHh4BufferSimple(jitc, 3);
 		imm = ip[1]; r = ip[2];
  		if (0 <= r && r <= 3)
 			jitc->dr[r] = imm;
@@ -122,6 +84,17 @@ fin:
 		retcode = 0;
 fin1:
 	return retcode;
+}
+
+void jitcAfterStepInteger(OsecpuJitc *jitc)
+{
+	if (jitc->ope04 != NULL && jitc->dst != jitc->ope04) {
+		// CND–½—ß‚Ì’¼Œã‚Ì–½—ß‚ðŒŸo.
+		Int32 *dst04 = jitc->ope04;
+		dst04[2] = jitc->instrLength; // ’¼Œã‚Ì–½—ß‚Ì–½—ß’·.
+		jitc->ope04 = NULL;
+	}
+	return;
 }
 
 void execStepInteger(OsecpuVm *vm)
@@ -144,15 +117,10 @@ void execStepInteger(OsecpuVm *vm)
 	}
 	if (opecode == 0x04) { /* CND(Rxx); */
 		r = ip[1];
-		ip += 2;
-		if ((vm->r[r] & 1) == 0) {
-			i = instrLength(ip, vm->ip1);
-			if (i < 0) {	// ‚±‚ê‚ÍƒI[ƒo[ƒ‰ƒ“‚µ‚©‚ ‚è‚¦‚È‚¢.
-				jitcSetRetCode(&vm->errorCode, EXEC_SRC_OVERRUN);
-				goto fin;
-			}
+		i = ip[2];
+		ip += 3;
+		if ((vm->r[r] & 1) == 0)
 			ip += i;
-		}
 		goto fin;
 	}
 	if (0x10 <= opecode && opecode <= 0x16 && opecode != 0x13) {
@@ -161,18 +129,12 @@ void execStepInteger(OsecpuVm *vm)
 			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
 			goto fin;
 		}
-		if (opecode == 0x10) // OR(r0, r1, r2, bits);
-			vm->r[r0] = vm->r[r1] | vm->r[r2];
-		if (opecode == 0x11) // XOR(r0, r1, r2, bits);
-			vm->r[r0] = vm->r[r1] ^ vm->r[r2];
-		if (opecode == 0x12) // AND(r0, r1, r2, bits);
-			vm->r[r0] = vm->r[r1] & vm->r[r2];
-		if (opecode == 0x14) // ADD(r0, r1, r2, bits);
-			vm->r[r0] = vm->r[r1] + vm->r[r2];
-		if (opecode == 0x15) // SUB(r0, r1, r2, bits);
-			vm->r[r0] = vm->r[r1] - vm->r[r2];
-		if (opecode == 0x16) // MUL(r0, r1, r2, bits);
-			vm->r[r0] = vm->r[r1] * vm->r[r2];
+		if (opecode == 0x10) vm->r[r0] = vm->r[r1] | vm->r[r2]; // OR(r0, r1, r2, bits);
+		if (opecode == 0x11) vm->r[r0] = vm->r[r1] ^ vm->r[r2]; // XOR(r0, r1, r2, bits);
+		if (opecode == 0x12) vm->r[r0] = vm->r[r1] & vm->r[r2]; // AND(r0, r1, r2, bits);
+		if (opecode == 0x14) vm->r[r0] = vm->r[r1] + vm->r[r2]; // ADD(r0, r1, r2, bits);
+		if (opecode == 0x15) vm->r[r0] = vm->r[r1] - vm->r[r2]; // SUB(r0, r1, r2, bits);
+		if (opecode == 0x16) vm->r[r0] = vm->r[r1] * vm->r[r2]; // MUL(r0, r1, r2, bits);
 		vm->bit[r0] = bit;
 		execStep_checkBitsRange(vm->r[r0], bit, vm);
 		ip += 5;

@@ -20,25 +20,29 @@ typedef struct _Defines {
 	Label label[DEFINES_MAXLABELS];
 } Defines;
 
-typedef struct _HH4Reader {
-	const unsigned char *p, *p1;
-	int half, len, errorCode;
-} HH4Reader;
+typedef struct _Hh4ReaderPointer {
+	const unsigned char *p;
+	int half;
+} Hh4ReaderPointer;
+
+typedef struct _Hh4Reader {
+	Hh4ReaderPointer p, p1;
+	int length, errorCode;
+} Hh4Reader;
 
 #define JITC_DSTLOG_SIZE	16
 
 typedef struct _OsecpuJitc {
 	int phase, dstLogIndex;
 	Defines *defines;
-	const Int32 *src, *src1;
+	Hh4Reader hh4r;
+	Int32 hh4Buffer[16];
 	Int32 *dst, *dst1, *dstLog[JITC_DSTLOG_SIZE];
 		// dstLog[]は命令を少しさかのぼりたいときに使う.
 		//   たとえばdata(2E)が利用する.
+	int errorCode, instrLength;
 	Int32 dr[4]; // Integer
-	int errorCode;
-	HH4Reader *hh4r;
-	const unsigned char *hh4src1;
-	Int32 *hh4dst, *hh4dst1;
+	Int32 *ope04; // Integer
 } OsecpuJitc;
 
 typedef struct _OsecpuVm {
@@ -47,19 +51,26 @@ typedef struct _OsecpuVm {
 	Int32 dr[4]; // Integer
 	double f[0x40]; // Float
 	int bitF[0x40]; // Float
-	PReg p[0x40];
+	PReg p[0x40]; // Pointer
 	const Int32 *ip, *ip1; /* instruction-pointer, program-counter */
 	const Defines *defines;
 	int errorCode;
 } OsecpuVm;
 
 // osecpu-vm.c
-void osecpuInit(); // 初期化.
-int instrLengthSimple(Int32 opecode); // 簡単な命令について命令長を返す.
-void instrLengthSimpleInit();
-void instrLengthSimpleInitTool(int *table, int ope0, int ope1); // 初期化支援.
-int instrLength(const Int32 *src, const Int32 *src1); // 命令長を返す.
+
+void definesInit(Defines *def);
+
+void hh4ReaderInit(Hh4Reader *hh4r, void *p, int half, void *p1, int half1);
+int hh4ReaderEnd(Hh4Reader *hh4r);
+int hh4ReaderGet4bit(Hh4Reader *hh4r);
+Int32 hh4ReaderGetUnsigned(Hh4Reader *hh4r);
+Int32 hh4ReaderGetSigned(Hh4Reader *hh4r);
+Int32 hh4ReaderGet4Nbit(Hh4Reader *hh4r, int n);
+
+void jitcInitDstLogSetPhase(OsecpuJitc *jitc, int phase);
 void jitcSetRetCode(int *pRC, int value);
+void jitcSetHh4BufferSimple(OsecpuJitc *jitc, int length);
 int jitcStep(OsecpuJitc *jitc); // OSECPU命令を一つだけ検証する. エラーがなければ0を返す.
 int jitcAll(OsecpuJitc *jitc);
 
@@ -95,39 +106,28 @@ int execAll(OsecpuVm *vm);
 
 void execStep_checkBitsRange(Int32 value, int bits, OsecpuVm *vm);
 
-// hh4.c : hh4関係.
-void hh4Init(HH4Reader *hh4r, void *p, int half, void *p1);
-int hh4Get4bit(HH4Reader *hh4r);
-Int32 hh4GetUnsigned(HH4Reader *hh4r);
-Int32 hh4GetSigned(HH4Reader *hh4r);
-Int32 *hh4Decode(OsecpuJitc *jitc);
 unsigned char *hh4StrToBin(unsigned char *src, unsigned char *src1, unsigned char *dst, unsigned char *dst1);
 
 // integer.c : 整数命令
-void osecpuInitInteger();
-int instrLengthInteger(const Int32 *src, const Int32 *src1);
-Int32 *hh4DecodeInteger(OsecpuJitc *jitc, Int32 opecode);
+void jitcInitInteger(OsecpuJitc *jitc);
 int jitcStepInteger(OsecpuJitc *jitc);
+void jitcAfterStepInteger(OsecpuJitc *jitc);
 void execStepInteger(OsecpuVm *vm);
 
 // pointer.c : ポインタ命令
-void osecpuInitPointer();
-int instrLengthPointer(const Int32 *src, const Int32 *src1);
-Int32 *hh4DecodePointer(OsecpuJitc *jitc, Int32 opecode);
+void jitcInitPointer(OsecpuJitc *jitc);
 int jitcStepPointer(OsecpuJitc *jitc);
+void jitcAfterStepPointer(OsecpuJitc *jitc);
 void execStepPointer(OsecpuVm *vm);
 
 // float.c : 浮動小数点命令
-void osecpuInitFloat();
-int instrLengthFloat(const Int32 *src, const Int32 *src1);
-Int32 *hh4DecodeFloat(OsecpuJitc *jitc, Int32 opecode);
+void jitcInitFloat(OsecpuJitc *jitc);
 int jitcStepFloat(OsecpuJitc *jitc);
+void jitcAfterStepFloat(OsecpuJitc *jitc);
 void execStepFloat(OsecpuVm *vm);
 
 // extend.c : 拡張命令関係.
-void osecpuInitExtend();
-int instrLengthExtend(const Int32 *src, const Int32 *src1);
-Int32 *hh4DecodeExtend(OsecpuJitc *jitc, Int32 opecode);
+void jitcInitExtend(OsecpuJitc *jitc);
 int jitcStepExtend(OsecpuJitc *jitc);
+void jitcAfterStepExtend(OsecpuJitc *jitc);
 void execStepExtend(OsecpuVm *vm);
-

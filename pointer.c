@@ -1,35 +1,10 @@
 #include "osecpu-vm.h"
 
-// ƒ|ƒCƒ“ƒ^ŠÖ˜A–½—ß: 01
+// ƒ|ƒCƒ“ƒ^ŠÖ˜A–½—ß: 01, 03
 
-void osecpuInitPointer()
+void jitcInitPointer(OsecpuJitc *jitc)
 {
-	static int table[] = {
-		0, 3, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 // 0x
-	};
-	instrLengthSimpleInitTool(table, 0x00, 0x0f);
 	return;
-}
-
-int instrLengthPointer(const Int32 *src, const Int32 *src1)
-// instrLengthSimpleInitTool()‚Å“o˜^‚µ‚Ä‚¢‚È‚¢‚à‚Ì‚¾‚¯‚É”½‰ž‚·‚ê‚Î‚æ‚¢.
-{
-	Int32 opecode = src[0];
-	int retcode = 0;
-	return retcode;
-}
-
-Int32 *hh4DecodePointer(OsecpuJitc *jitc, Int32 opecode)
-// instrLengthSimpleInitTool()‚Å“o˜^‚µ‚Ä‚¢‚È‚¢‚à‚Ì‚¾‚¯‚É”½‰ž‚·‚ê‚Î‚æ‚¢.
-{
-	HH4Reader *hh4r = jitc->hh4r;
-	Int32 *dst = jitc->hh4dst, *dst1 = jitc->hh4dst1;
-fin:
-	jitc->dst = dst;
-	return dst;
-err:
-	jitc->errorCode = JITC_HH4_DST_OVERRUN;
-	return dst;
 }
 
 void jitcStep_checkPxx(int *pRC, int pxx)
@@ -41,11 +16,12 @@ void jitcStep_checkPxx(int *pRC, int pxx)
 
 int jitcStepPointer(OsecpuJitc *jitc)
 {
-	const Int32 *ip = jitc->src;
+	Int32 *ip = jitc->hh4Buffer;
 	Int32 opecode = ip[0], imm;
 	int retcode = -1, *pRC = &retcode;
 	int i, opt, p;
 	if (opecode == 0x01) { /* LB(opt, uimm); */
+		jitcSetHh4BufferSimple(jitc, 3);
 		i = ip[1]; opt = ip[2];
 		if (jitc->phase > 0) goto fin;
 		if (!(0 <= i && i < DEFINES_MAXLABELS)) {
@@ -66,6 +42,7 @@ int jitcStepPointer(OsecpuJitc *jitc)
 		goto fin;
 	}
 	if (opecode == 0x03) { /* PLIMM(imm, Pxx); */
+		jitcSetHh4BufferSimple(jitc, 3);
 		i = ip[1]; p = ip[2];
 		if (!(0 <= i && i < DEFINES_MAXLABELS)) {
 			jitcSetRetCode(pRC, JITC_BAD_LABEL);
@@ -87,6 +64,11 @@ fin:
 		retcode = 0;
 fin1:
 	return retcode;
+}
+
+void jitcAfterStepPointer(OsecpuJitc *jitc)
+{
+	return;
 }
 
 void execStepPointer(OsecpuVm *vm)
