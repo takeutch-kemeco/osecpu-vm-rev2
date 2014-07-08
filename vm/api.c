@@ -27,9 +27,11 @@ int OsecpuMain(int argc, const unsigned char **argv)
 	unsigned char *byteBuf0 = malloc(BUFFER_SIZE);
 	Int32 *j32buf = malloc(BUFFER_SIZE * sizeof (Int32));
 	int fileSize, rc, i;
+	int stackSize = 1; /* メガバイト単位 */
 	FILE *fp;
 	jitc.defines = &defs;
 	vm.defines = &defs;
+	osecpuVmStackInit(&vm, stackSize * (1024 * 1024));
 	if (argc <= 1) {
 		fputs("usage>osecpu app.ose\n", stderr);
 		exit(1);
@@ -49,6 +51,8 @@ int OsecpuMain(int argc, const unsigned char **argv)
 		fputs("app-file signature mismatch.\n", stderr);
 		exit(1);
 	}
+
+	// フロントエンドコードからバックエンドコードを得るためのループ.
 	for (;;) {
 		if (fileSize < 0) break;
 		if (byteBuf0[2] == 0x02) {
@@ -72,6 +76,7 @@ int OsecpuMain(int argc, const unsigned char **argv)
 		fputs("app-file decode error.\n", stderr);
 		exit(1);
 	}
+
 	hh4ReaderInit(&jitc.hh4r, byteBuf0 + 3, 0, byteBuf0 + fileSize, 0);
 	jitc.dst  = j32buf;
 	jitc.dst1 = j32buf + BUFFER_SIZE;

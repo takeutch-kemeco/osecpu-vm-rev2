@@ -10,18 +10,17 @@ prompt>osecpu app0100.ose
 書いたものです。とても小さいですが、ちゃんと動きます。
 もちろん通常のコンパイルでもこのコードが得られるようにツールを整備する予定です。
 
-http://osecpu.osask.jp/wiki/?page0036 に旧バージョン向けのアプリケーションの作り方の資料があります。
-今のバージョンと細かいところが違っていますが、雰囲気は似ているので見比べればわかるでしょう。
-分からなければ、 http://osecpu.osask.jp/wiki/?impressions で質問してもらえれば、説明できると思います。
+http://osecpu.osask.jp/wiki/?page0087 にアプリケーションの作り方の資料があります。
 
 <開発者>
   川合秀実 : 下記以外のすべて
-  Livaさん : DEP(DataExecProtect)対策, MacOS版開発
-  Irisさん : 優良アプリ開発, VMバグ発見, VM改良提案
+  Livaさん : DEP(DataExecProtect)対策, VMのMacOS版開発 （2011年セキュリティ＆プログラミングキャンプ受講生）
+  Irisさん : 優良アプリ開発, VMバグ発見（rev1）, VM改良提案 （2013年セキュリティキャンプ受講生）
   takeutch-kemecoさん : VMのLinux版開発
   herbaさん : VMバグ発見（rev1）
-  lambdaliceさん : VMバグ発見（rev1）
-  hikarupspさん : MacOS版改良パッチ, CMPcc命令のbit1の仕様についてアイデア提供
+  lambdaliceさん : VMバグ発見（rev1） （2013年セキュリティキャンプ受講生）
+  hikarupspさん : VMのMacOS版改良パッチ, CMPcc命令のbit1の仕様についてアイデア提供
+  ???さん : VMのMacOS版改良パッチ （2014年セキュリティキャンプ受講生）
 
 <主要なアプリ>
   app0100 (  13バイト) : グラデーション
@@ -32,4 +31,10 @@ http://osecpu.osask.jp/wiki/?page0036 に旧バージョン向けのアプリケーションの作り
 
 ver.1.11:
   フロントエンドコードのデコーダがPLIMM命令やLMEM命令に対応。
+
+ver.1.12:
+  sleepやinkeyのAPIに対応。レジスタの使い方の変更に対応。CMPcc命令のbit1の意味を拡張。
+
+ver.1.13:
+  Enter/Leave命令に対応。tek5に対応。MacOS版の表示周りを改善。
 

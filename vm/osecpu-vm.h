@@ -75,6 +75,7 @@ typedef struct _OsecpuVm {
 	const Defines *defines;
 	int errorCode;
 	unsigned char prefix2f[PREFIX2F_SIZE];
+	char *stack0, *stack1, *stackTop;
 } OsecpuVm;
 
 // osecpu-vm.c
@@ -117,6 +118,7 @@ int jitcAll(OsecpuJitc *jitc);
 #define JITC_BAD_TYPE			16
 #define JITC_BAD_PREFIX			17
 #define JITC_UNSUPPORTED		18
+#define JITC_BAD_ENTER			19
 
 int execStep(OsecpuVm *r); // åüèÿçœÇ›ÇÃOSECPUñΩóﬂÇàÍÇ¬ÇæÇØé¿çsÇ∑ÇÈ.
 int execAll(OsecpuVm *vm);
@@ -130,6 +132,9 @@ int execAll(OsecpuVm *vm);
 #define EXEC_PTR_RANGE_OVER		 7+256
 #define EXEC_BAD_ACCESS			 8+256
 #define EXEC_API_ERROR			 9+256
+#define EXEC_STACK_ALLOC_ERROR	10+256
+#define EXEC_STACK_FREE_ERROR	11+256
+
 #define EXEC_ABORT_OPECODE_M1	0xffff
 
 #define EXEC_CMA_FLAG_SEEK		1
@@ -183,6 +188,7 @@ void jitcInitOther(OsecpuJitc *jitc);
 int jitcStepOther(OsecpuJitc *jitc);
 int jitcAfterStepOther(OsecpuJitc *jitc);
 void execStepOther(OsecpuVm *vm);
+int osecpuVmStackInit(OsecpuVm *vm, int stackSize);
 
 // extend.c : ägí£ñΩóﬂä÷åW.
 void jitcInitExtend(OsecpuJitc *jitc);

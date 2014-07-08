@@ -43,8 +43,6 @@ int tek_getsize(unsigned char *p)
 	return size;
 }	  /* （註）memcmpはstrncmpの仲間で、文字列中に0があっても指定された15文字まで比較する関数 */
 
-#endif
-
 int tek_decomp(unsigned char *p, char *q, int size)
 {
 	int err = -1;
@@ -66,8 +64,6 @@ if (*p == 0x89) {
 	}
 	return 0;	/* 成功 */
 }
-
-#if 0
 
 static int tek_lzrestore_stk1(int srcsiz, UCHAR *src, int outsiz, UCHAR *q)
 {
@@ -261,7 +257,7 @@ static int tek_decode2(int siz, UCHAR *p, UCHAR *q)
 
 static int tek_decmain5(int *work, UCHAR *src, int osiz, UCHAR *q, int lc, int pb, int lp, int flags);
 
-static int tek_lzrestore_tek5(int srcsiz, UCHAR *src, int outsiz, UCHAR *outbuf)
+int tek_lzrestore_tek5(int srcsiz, UCHAR *src, int outsiz, UCHAR *outbuf)
 {
 	int wrksiz, lc, lp, pb, flags, *work, prop0, fl;
 
@@ -642,6 +638,8 @@ err:
 	return 1;
 }
 
+#if 0
+
 static int tek_decode5(int siz, UCHAR *p, UCHAR *q)
 {
 	UCHAR *p1 = p + siz;
@@ -668,3 +666,5 @@ static int tek_decode5(int siz, UCHAR *p, UCHAR *q)
 	}
 	return st;
 }
+
+#endif

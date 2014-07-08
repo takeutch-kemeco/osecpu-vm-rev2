@@ -158,6 +158,9 @@ int jitcStepPointer(OsecpuJitc *jitc)
 			jitc->defines->label[i].typ = typ;
 			jitc->defines->label[i].dst = ip;
 		}
+		i = jitc->dstLogIndex;
+		jitc->dstLog[i] = ip; // ƒGƒ‰[‚Ì‚È‚©‚Á‚½–½—ß‚Í‹L˜^‚·‚é.
+		jitc->dstLogIndex = (i + 1) % JITC_DSTLOG_SIZE;
 		goto fin;
 
 	}

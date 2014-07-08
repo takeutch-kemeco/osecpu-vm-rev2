@@ -484,7 +484,7 @@ winClosed : (char *)_winClosed;
 
 - (void)flushWin : (NSRect) rect
   {
-    [_view drawRect:rect];
+    [_view setNeedsDisplayInRect:rect]; // by ???, 2014.06.25
   }
 
 @end
@@ -532,8 +532,6 @@ void drv_sleep(int msec)
 #if (DRV_OSNUM == 0x0003)
  
 // by takeutch-kemeco, 2013.07.25-
- 
-// gcc -D__linux__ -o osecpu-test osecpu-vm.c other.c integer.c pointer.c float.c extend.c api.c driver.c test.c `pkg-config blike --libs --cflags`
 
 typedef unsigned char UCHAR;
  

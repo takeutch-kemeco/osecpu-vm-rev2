@@ -208,10 +208,12 @@ fin:
 	retcode = jitcAfterStepPointer(jitc);	if (retcode > 0) goto fin1;
 	retcode = jitcAfterStepFloat(jitc);		if (retcode > 0) goto fin1;
 	retcode = jitcAfterStepExtend(jitc);	if (retcode > 0) goto fin1;
-	i = jitc->dstLogIndex;
-	jitc->dstLog[i] = jitc->dst; // エラーのなかった命令は記録する.
-	jitc->dstLogIndex = (i + 1) % JITC_DSTLOG_SIZE;
-	jitc->dst += jitc->instrLength;
+	if (jitc->instrLength > 0) {
+		i = jitc->dstLogIndex;
+		jitc->dstLog[i] = jitc->dst; // エラーのなかった命令は記録する.
+		jitc->dstLogIndex = (i + 1) % JITC_DSTLOG_SIZE;
+		jitc->dst += jitc->instrLength;
+	}
 fin1:
 	jitc->errorCode = retcode;
 	return retcode;

@@ -82,8 +82,28 @@ fin:
 
 // tek5ŠÖŒW.
 
+int tek_lzrestore_tek5(int srcsiz, UCHAR *src, int outsiz, UCHAR *outbuf);
+
 int decode_tek5(const UCHAR *p, const UCHAR *p1, UCHAR *q, UCHAR *q1)
 {
+	int srcsiz = p1 - p, outsiz, i;
+	UCHAR *pp0 = q1 - 8 - srcsiz, *pp1 = q1 - 8;
+	Hh4Reader hh4r;
+	memmove(pp0, p, srcsiz);
+	hh4ReaderInit(&hh4r, pp0, 0, pp1, 0);
+	i = hh4ReaderGetUnsigned(&hh4r);
+	outsiz = hh4ReaderGetUnsigned(&hh4r);
+	pp0 = (UCHAR *) hh4r.p.p;
+	if (i > 0) {
+		pp0--;
+		if (i == 1) *pp0 = 0x15;
+		if (i == 2) *pp0 = 0x19;
+		if (i == 3) *pp0 = 0x21;
+		if (i >= 4) goto err;
+	}
+	i = tek_lzrestore_tek5(pp1 - pp0, pp0, outsiz, q);
+	if (i == 0) return outsiz;
+err:
 	return -1;
 }
 

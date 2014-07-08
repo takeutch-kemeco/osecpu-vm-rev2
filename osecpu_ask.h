@@ -74,9 +74,10 @@
 
 #define OPSWP(...)									DB(0xff, 0x00, 0xff, __VA_ARGS__, 0)	// 2ŒÂ‚¸‚Â‘‚­. ‘å‚«‚¢•û‚©‚ç‘‚­.
 
-#define beginFunc(label)							ELB(label); DB(0xbc, 0xf0)
-	// 0x3c, opt, r1, p1, lenR|lenP, r0, p0 ... opt=0‚È‚ç’Ç‰Á‚È‚µ‚Å‚¢‚¢‚ñ‚¶‚á‚È‚¢‚©.
-#define endFunc()									DB(0xbd, 0xf0); RET()
+#define beginFunc0(label, r1, bit0, p1, f1, bit1, _typ)	ELB(label); DB(0xbc); imm(r1); bit(bit0); imm(p1); imm(f1); bit(bit1); typ(_typ)
+#define endFunc0(r1, bit0, p1, f1, bit1, _typ)		DB(0xbd); imm(r1); bit(bit0); imm(p1); imm(f1); bit(bit1); typ(_typ); RET()
+#define beginFunc(label)							beginFunc0(label, 16, 32, 16, 16, 64, 0)
+#define endFunc()									endFunc0(16, 32, 16, 16, 64, 0)
 
 #define Int32s										SInt32
 #define VoidPtr										VPtr

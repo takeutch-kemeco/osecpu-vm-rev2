@@ -172,7 +172,7 @@ int main(int argc, const UCHAR **argv)
 			 "  aska   ver.0.20\n"//108
 			 "  prepro ver.0.01\n"
 			 "  lbstk  ver.0.03\n"
-			 "  db2bin ver.0.16\n"//112
+			 "  db2bin ver.0.17\n"//113
 			 "  disasm ver.0.02\n"
 			 "  appack ver.0.20\n"//110
 			 "  maklib ver.0.01\n"
@@ -2766,8 +2766,8 @@ int db2binSub2Len(const UCHAR *src)
 			fprintf(stderr, "db2binSub2Len: error: F0 (align 8bit) bit=%d len=%d\n", j, i);
 		i = 13 + ((i * j) >> 3);
 	}
-	if (src[0] == 0xbc && src[1] == 0xf0) i = 2; // ENTER
-	if (src[0] == 0xbd && src[1] == 0xf0) i = 2; // LEAVE
+	if (src[0] == 0xbc && src[1] == 0xf7 && src[2] == 0x88) i = 37; // ENTER
+	if (src[0] == 0xbd && src[1] == 0xf7 && src[2] == 0x88) i = 37; // LEAVE
 	if (src[0] == 0xfc && src[1] == 0xfd && src[2] == 0xf7 && src[3] == 0x88 && src[8] == 0xf0) i = 9; // LIDR
 	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x00) i = 3; // remark-0
 	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x10) i = 3; // remark-1
