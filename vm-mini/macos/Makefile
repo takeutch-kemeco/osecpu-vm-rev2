@@ -1,8 +1,8 @@
 # for Mac OSX
 
 CC = cc
-SRCS = api.c decode.c driver.c extend.c float.c integer.c osecpu-vm.c other.c pointer.c tek.c debug.c
-BINNAME = osecpu.bin
+SRCS = api.c driver.c extend.c float.c integer.c osecpu-vm.c other.c pointer.c
+BINNAME = osecpu-m.bin
 DEL = rm
 CFLAGS = -x objective-c -Wall -arch x86_64 -framework Cocoa
 

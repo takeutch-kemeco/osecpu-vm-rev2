@@ -76,8 +76,8 @@
 
 #define beginFunc0(label, r1, bit0, p1, f1, bit1, _typ)	ELB(label); DB(0xbc); imm(r1); bit(bit0); imm(p1); imm(f1); bit(bit1); typ(_typ)
 #define endFunc0(r1, bit0, p1, f1, bit1, _typ)		DB(0xbd); imm(r1); bit(bit0); imm(p1); imm(f1); bit(bit1); typ(_typ); RET()
-#define beginFunc(label)							beginFunc0(label, 16, 32, 16, 16, 64, 0)
-#define endFunc()									endFunc0(16, 32, 16, 16, 64, 0)
+#define beginFunc(label)							beginFunc0(label, 32, 32, 16, 16, 64, 0)
+#define endFunc()									endFunc0(32, 32, 16, 16, 64, 0)
 
 #define Int32s										SInt32
 #define VoidPtr										VPtr

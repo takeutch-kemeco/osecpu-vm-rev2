@@ -6,20 +6,9 @@ typedef int Int32; // 32bit以上であればよい（64bit以上でもよい）.
 
 #define DEFINES_MAXLABELS	4096
 
-typedef struct _PtrCtrl {
-	int liveSign;
-	int size, typ;
-	unsigned char *p0;
-} PtrCtrl;
-
 typedef struct _PReg {
-	unsigned char *p;
+	unsigned char *p, *p0;
 	int typ;
-	unsigned char *p0, *p1;
-	int liveSign;
-	struct PtrCtrl *pls;
-	int flags;	/* read/writeなど */
-	unsigned char *bit;
 } PReg;
 
 typedef struct _Label {
@@ -66,20 +55,14 @@ typedef struct _OsecpuJitc {
 
 typedef struct _OsecpuVm {
 	Int32 r[0x40]; // Integer
-	int bit[0x40]; // Integer
 	Int32 dr[4]; // Integer
 	double f[0x40]; // Float
-	int bitF[0x40]; // Float
 	PReg p[0x40]; // Pointer
 	const Int32 *ip, *ip1; /* instruction-pointer, program-counter */
 	const Defines *defines;
 	int errorCode;
 	unsigned char prefix2f[PREFIX2F_SIZE];
 	char *stack0, *stack1, *stackTop;
-	char toDebugMonitor, exitToDebug, debugAutoFlsh;
-	int debugBreakPointIndex;
-	Int32 debugBreakPointValue;
-	int debugWatchIndex[2], debugWatchs;
 } OsecpuVm;
 
 // osecpu-vm.c
@@ -148,9 +131,6 @@ int execAll(OsecpuVm *vm);
 #define EXEC_CMA_FLAG_WRITE		4
 #define EXEC_CMA_FLAG_EXEC		8
 
-#define BIT_DISABLE_REG		-1
-#define BIT_DISABLE_MEM		255
-
 #define PTR_TYP_NULL			0
 #define PTR_TYP_CODE			-1
 #define PTR_TYP_NATIVECODE		-2
@@ -166,10 +146,7 @@ void execStepInteger(OsecpuVm *vm);
 
 int getTypBitInteger(int typ);
 void getTypInfoInteger(int typ, int *typSize0, int *typSize1, int *typSign);
-Int32 execStep_checkBitsRange(Int32 value, int bit, OsecpuVm *vm, int bit1, int bit2);
 void jitcStep_checkBits32(int *pRC, int bits);
-void jitcStep_checkRxx(int *pRC, int rxx);
-void jitcStep_checkRxxNotR3F(int *pRC, int rxx);
 Int32 execStep_SignBitExtend(Int32 value, int bit);
 
 // pointer.c : ポインタ命令.
@@ -179,7 +156,6 @@ int jitcAfterStepPointer(OsecpuJitc *jitc);
 void execStepPointer(OsecpuVm *vm);
 
 void getTypSize(int typ, int *typSize0, int *typSize1, int *typSign); // これは直すべき.
-void jitcStep_checkPxx(int *pRC, int pxx);
 void execStep_checkMemAccess(OsecpuVm *vm, int p, int typ, int flag);
 void execStep_plimm(OsecpuVm *vm, int p, int i);
 
@@ -201,13 +177,4 @@ void jitcInitExtend(OsecpuJitc *jitc);
 int jitcStepExtend(OsecpuJitc *jitc);
 int jitcAfterStepExtend(OsecpuJitc *jitc);
 void execStepExtend(OsecpuVm *vm);
-
-// decode.c : フロントエンドコード関係.
-int decode_upx  (const unsigned char *p, const unsigned char *p1, unsigned char *q, unsigned char *q1);
-int decode_tek5 (const unsigned char *p, const unsigned char *p1, unsigned char *q, unsigned char *q1);
-int decode_fcode(const unsigned char *p, const unsigned char *p1, unsigned char *q, unsigned char *q1);
-
-// debug.c : デバッグモニター関係.
-char *debugJitcReport(OsecpuJitc *jitc, char *msg);
-void execStepDebug(OsecpuVm *vm);
 

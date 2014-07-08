@@ -251,7 +251,6 @@ int execStep(OsecpuVm *vm)
 {
 	const Int32 *ip = vm->ip;
 	vm->errorCode = 0;
-	execStepDebug(vm);
 	if (ip >= vm->ip1) {
  		vm->errorCode = EXEC_SRC_OVERRUN;
 		goto fin;
@@ -276,13 +275,8 @@ int execAll(OsecpuVm *vm)
 	for (;;) {
 		// —‘z‚Í“K“–‚ÈãŒÀ‚ðŒˆ‚ß‚ÄA‹x‚Ý‹x‚Ý‚Å‚â‚é‚×‚«‚©‚à‚µ‚ê‚È‚¢.
 		execStep(vm);
-		if (vm->errorCode != 0) {
-			if (vm->errorCode != EXEC_SRC_OVERRUN) {
-				vm->toDebugMonitor = 1;
-				execStepDebug(vm);
-			}
+		if (vm->errorCode != 0)
 			break;
-		}
 	}
 	return vm->errorCode;
 }

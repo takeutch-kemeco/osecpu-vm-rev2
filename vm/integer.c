@@ -92,6 +92,8 @@ int jitcStepInteger(OsecpuJitc *jitc)
 			jitcSetRetCode(pRC, JITC_UNSUPPORTED);
 			goto fin;
 		}
+		jitcStep_checkRxx(pRC, r);
+		jitcStep_checkBits32(pRC, bit);
 		jitcStep_checkPxx(pRC, p);
 		jitcStep_checkRxxNotR3F(pRC, r);
 		j = 0;
@@ -308,7 +310,7 @@ void execStepInteger(OsecpuVm *vm)
 		*(vm->p[p].bit) = mbit;
 		i = vm->r[r];
 		if (vm->prefix2f[0] != 0) {
-			// 2F-1: マスクライト.
+			// 2F-0: マスクライト.
 			if (typSize0 < 32) {
 				if (typSign == 0)
 					i &= tmax;

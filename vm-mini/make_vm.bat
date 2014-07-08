@@ -1,0 +1,1 @@
+c:\mingw\bin\gcc.exe -o osecpu-m.exe -Os osecpu-vm.c other.c integer.c pointer.c float.c extend.c api.c driver.c -Wl,-s,-lgdi32

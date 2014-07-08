@@ -7,23 +7,10 @@ void jitcInitFloat(OsecpuJitc *jitc)
 	return;
 }
 
-void jitcStep_checkFxx(int *pRC, int fxx)
-{
-	if (!(0x00 <= fxx && fxx <= 0x3f))
-		jitcSetRetCode(pRC, JITC_BAD_FXX);
-	return;
-}
-
-void jitcStep_checkFxxNotF3F(int *pRC, int fxx)
-{
-	if (!(0x00 <= fxx && fxx <= 0x3e))
-		jitcSetRetCode(pRC, JITC_BAD_FXX);
-	return;
-}
-
 void jitcStep_checkBitsF(int *pRC, int bit)
+// vm-miniではdoubleは簡略化のためにサポートしない.
 {
-	if (bit != 0 && bit != 32 && bit != 64)
+	if (bit != 0 && bit != 32)
 		jitcSetRetCode(pRC, JITC_BAD_BITS);
 	return;
 }
@@ -43,7 +30,6 @@ int jitcStepFloat(OsecpuJitc *jitc)
 			jitc->instrLength = 5;
 			f = ip[3]; bit = ip[4];
 			jitcStep_checkBitsF(pRC, bit);
-			jitcStep_checkFxx(pRC, f);
 			goto fin;
 		}
 		if (ip[1] == 1) {
@@ -53,7 +39,6 @@ int jitcStepFloat(OsecpuJitc *jitc)
 			jitc->instrLength = 5;
 			f = ip[3]; bit = ip[4];
 			jitcStep_checkBitsF(pRC, bit);
-			jitcStep_checkFxx(pRC, f);
 			goto fin;
 		}
 		if (ip[1] == 2) {
@@ -64,7 +49,6 @@ int jitcStepFloat(OsecpuJitc *jitc)
 			jitc->instrLength = 6;
 			f = ip[4]; bit = ip[5];
 			jitcStep_checkBitsF(pRC, bit);
-			jitcStep_checkFxx(pRC, f);
 			goto fin;
 		}
 		jitcSetRetCode(pRC, JITC_BAD_FLIMM_MODE);
@@ -74,46 +58,34 @@ int jitcStepFloat(OsecpuJitc *jitc)
 		jitcSetHh4BufferSimple(jitc, 5);
 		f1 = ip[1]; bit1 = ip[2]; f0 = ip[3]; bit0 = ip[4];
 		jitcStep_checkBitsF(pRC, bit1);
-		jitcStep_checkFxx(pRC, f1);
 		jitcStep_checkBitsF(pRC, bit0);
-		jitcStep_checkFxx(pRC, f0);
 		goto fin; // bit0とbit1の大小関係に制約はない. bit0>bit1の場合は精度を拡張することになる.
 	}
 	if (opecode == 0x42) {	// CNVIF
 		jitcSetHh4BufferSimple(jitc, 5);
 		r = ip[1]; bit1 = ip[2]; f = ip[3]; bit0 = ip[4];
 		jitcStep_checkBits32(pRC, bit1);
-		jitcStep_checkRxx(pRC, r);
 		jitcStep_checkBitsF(pRC, bit0);
-		jitcStep_checkFxxNotF3F(pRC, f);
 		goto fin;
 	}
 	if (opecode == 0x43) {	// CNVFI
 		jitcSetHh4BufferSimple(jitc, 5);
 		f = ip[1]; bit1 = ip[2]; r = ip[3]; bit0 = ip[4];
 		jitcStep_checkBitsF(pRC, bit1);
-		jitcStep_checkFxx(pRC, f);
 		jitcStep_checkBits32(pRC, bit0);
-		jitcStep_checkRxxNotR3F(pRC, r);
 		jitc->prefix2f[0] = 0; // 2F-0.
 		goto fin;
 	}
 	if (0x48 <= opecode && opecode <= 0x4d) {
 		jitcSetHh4BufferSimple(jitc, 6);
 		f1 = ip[1]; f2 = ip[2]; bit1 = ip[3]; r = ip[4]; bit0 = ip[5];
-		jitcStep_checkFxx(pRC, f1);
-		jitcStep_checkFxx(pRC, f2);
 		jitcStep_checkBitsF(pRC, bit1);
-		jitcStep_checkRxx(pRC, r);
 		jitcStep_checkBits32(pRC, bit0);
 		goto fin;
 	}
 	if (0x50 <= opecode && opecode <= 0x53) {
 		jitcSetHh4BufferSimple(jitc, 5);
 		f1 = ip[1]; f2 = ip[2]; f0 = ip[3]; bit = ip[4];
-		jitcStep_checkFxx(pRC, f1);
-		jitcStep_checkFxx(pRC, f2);
-		jitcStep_checkFxxNotF3F(pRC, f0);
 		jitcStep_checkBitsF(pRC, bit);
 		goto fin;
 	}
@@ -141,7 +113,6 @@ void execStepFloat(OsecpuVm *vm)
 		if (ip[1] == 0) {
 			f = ip[3]; bit = ip[4];
 			vm->f[f] = (double) ip[2];
-			vm->bitF[f] = bit;
 			ip += 5;
 			goto fin;
 		}
@@ -153,7 +124,6 @@ void execStepFloat(OsecpuVm *vm)
 			} u32;
 			u32.i32 = ip[2];
 			vm->f[f] = (double) u32.f32;
-			vm->bitF[f] = bit;
 			ip += 5;
 			goto fin;
 		}
@@ -166,51 +136,30 @@ void execStepFloat(OsecpuVm *vm)
 			u64.i32[1] = ip[2]; // リトルエンディアンを想定.
 			u64.i32[0] = ip[3];
 			vm->f[f] = u64.f64;
-			vm->bitF[f] = bit;
 			ip += 6;
 			goto fin;
 		}
 	}
 	if (opecode == 0x41) {
 		f1 = ip[1]; bit1 = ip[2]; f0 = ip[3]; bit0 = ip[4];
-		if (vm->bitF[f1] != BIT_DISABLE_REG && bit1 != vm->bitF[f1]) {
-			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
-			goto fin;
-		}
 		vm->f[f0] = vm->f[f1];
-		vm->bitF[f0] = bit0;
 		ip += 5;
 		goto fin;
 	}
 	if (opecode == 0x42) {
 		r = ip[1]; bit1 = ip[2]; f = ip[3]; bit0 = ip[4];
-		if (bit1 > vm->bit[r]) {
-			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
-			goto fin;
-		}
 		vm->f[f] = (double) vm->r[r];
-		vm->bitF[f] = bit0;
 		ip += 5;
 		goto fin;
 	}
 	if (opecode == 0x43) {
 		f = ip[1]; bit1 = ip[2]; r = ip[3]; bit0 = ip[4];
-		if (vm->bitF[f] != BIT_DISABLE_REG && bit1 != vm->bitF[f]) {
-			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
-			goto fin;
-		}
 		vm->r[r] = (Int32) vm->f[f];
-		vm->bit[r] = bit0;
-		vm->r[r] = execStep_checkBitsRange(vm->r[r], bit0, vm, 0, 0);
 		ip += 5;
 		goto fin;
 	}
 	if (0x48 <= opecode && opecode <= 0x4d) {
 		f1 = ip[1]; f2 = ip[2]; bit1 = ip[3]; r = ip[4]; bit0 = ip[5];
-		if ((vm->bitF[f1] != BIT_DISABLE_REG && bit1 != vm->bitF[f1]) || (vm->bitF[f2] != BIT_DISABLE_REG && bit1 != vm->bitF[f2])) {
-			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
-			goto fin;
-		}
 		if (opecode == 0x48) i = vm->f[f1] == vm->f[f2];
 		if (opecode == 0x49) i = vm->f[f1] != vm->f[f2];
 		if (opecode == 0x4a) i = vm->f[f1] <  vm->f[f2];
@@ -220,21 +169,15 @@ void execStepFloat(OsecpuVm *vm)
 		if (i != 0)
 			i = -1;
 		vm->r[r] = i;
-		vm->bit[r] = bit0;
 		ip += 6;
 		goto fin;
 	}
 	if (0x50 <= opecode && opecode <= 0x53) {
 		f1 = ip[1]; f2 = ip[2]; f0 = ip[3]; bit = ip[4];
-		if ((vm->bitF[f1] != BIT_DISABLE_REG && bit != vm->bitF[f1]) || (vm->bitF[f2] != BIT_DISABLE_REG && bit != vm->bitF[f2])) {
-			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
-			goto fin;
-		}
 		if (opecode == 0x50) vm->f[f0] = vm->f[f1] + vm->f[f2];
 		if (opecode == 0x51) vm->f[f0] = vm->f[f1] - vm->f[f2];
 		if (opecode == 0x52) vm->f[f0] = vm->f[f1] * vm->f[f2];
 		if (opecode == 0x53) vm->f[f0] = vm->f[f1] / vm->f[f2];
-		vm->bitF[f0] = bit;
 		ip += 5;
 		goto fin;
 	}

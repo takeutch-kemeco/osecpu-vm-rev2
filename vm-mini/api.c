@@ -4,8 +4,7 @@
 // OsecpuMain()はこのapi.cにあります！
 
 typedef struct _ApiWork {
-	char winClosed, autoSleep /* , col3bgr */;
-//	jmp_buf setjmpEnv;
+	char winClosed, autoSleep;
 	jmp_buf setjmpErr;
 	unsigned char lastConsoleChar;
 } ApiWork;
@@ -29,25 +28,14 @@ int OsecpuMain(int argc, const unsigned char **argv)
 	int fileSize, rc, i;
 	int stackSize = 1; /* メガバイト単位 */
 	FILE *fp;
-	char outputBackend = 0;
 	jitc.defines = &defs;
 	vm.defines = &defs;
-	vm.toDebugMonitor = 0;
-	vm.exitToDebug = 0;
-	vm.debugAutoFlsh = 1;
-	vm.debugBreakPointIndex = -1;
-	vm.debugBreakPointValue = 0;
 	osecpuVmStackInit(&vm, stackSize * (1024 * 1024));
-	for (i = 1; ; i++) {
-		if (argc <= i) {
-			fputs("usage>osecpu app.ose\n", stderr);
-			exit(1);
-		}
-		if (argv[i][0] != '-') break;
-		if (strcmp(argv[i], "-d") == 0) vm.toDebugMonitor = vm.exitToDebug = 1;
-		if (strcmp(argv[i], "-b") == 0) outputBackend = 1;
+	if (argc <= 1) {
+		fputs("usage>osecpu app.ose\n", stderr);
+		exit(1);
 	}
-	fp = fopen(argv[i], "rb");
+	fp = fopen(argv[1], "rb");
 	if (fp == NULL) {
 		fputs("fopen error.\n", stderr);
 		exit(1);
@@ -58,46 +46,9 @@ int OsecpuMain(int argc, const unsigned char **argv)
 		fputs("app-file too large.\n", stderr);
 		exit(1);
 	}
-	if (byteBuf0[0] != 0x05 || byteBuf0[1] != 0xe2 || fileSize < 3) {
+	if (byteBuf0[0] != 0x05 || byteBuf0[1] != 0xe2 || byteBuf0[2] != 0x00 || fileSize < 3) {
 		fputs("app-file signature mismatch.\n", stderr);
 		exit(1);
-	}
-
-	// フロントエンドコードからバックエンドコードを得るためのループ.
-	for (;;) {
-		if (fileSize < 0) break;
-		if (byteBuf0[2] == 0x02) {
-			fileSize = decode_tek5 (byteBuf0 + 3, byteBuf0 + fileSize, byteBuf0 + 2, byteBuf0 + BUFFER_SIZE);
-			if (fileSize > 0) fileSize += 2;
-			continue;
-		}
-		if (byteBuf0[2] == 0x01) {
-			fileSize = decode_upx  (byteBuf0 + 3, byteBuf0 + fileSize, byteBuf0 + 2, byteBuf0 + BUFFER_SIZE);
-			if (fileSize > 0) fileSize += 2;
-			continue;
-		}
-		if (byteBuf0[2] >= 0x10) {
-			fileSize = decode_fcode(byteBuf0 + 2, byteBuf0 + fileSize, byteBuf0 + 2, byteBuf0 + BUFFER_SIZE);
-			if (fileSize > 0) fileSize += 2;
-			continue;
-		}
-		break;
-	}
-	if (fileSize <= 0 || byteBuf0[2] != 0x00) {
-		fputs("app-file decode error.\n", stderr);
-		exit(1);
-	}
-	if (outputBackend != 0) {
-		fputs("output backend code.\n", stderr);
-		fp = NULL;
-		if (argc > i + 1)
-			fp = fopen(argv[i + 1], "wb");
-		if (fp == NULL) {
-			fputs("fopen error.\nusage>osecpu -b app.ose app.org\n", stderr);
-			exit(1);
-		}
-		fwrite(byteBuf0, 1, fileSize, fp);
-		return 0;
 	}
 
 	hh4ReaderInit(&jitc.hh4r, byteBuf0 + 3, 0, byteBuf0 + fileSize, 0);
@@ -105,19 +56,13 @@ int OsecpuMain(int argc, const unsigned char **argv)
 	jitc.dst1 = j32buf + BUFFER_SIZE;
 	rc = jitcAll(&jitc);
 	if (rc != 0) {
-		fprintf(stderr, "%s\n", debugJitcReport(&jitc, byteBuf0));
-	//	fprintf(stderr, "jitcAll()=%d, DR0=%d\n", rc, jitc.dr[0]);
+		fprintf(stderr, "jitcAll()=%d, DR0=%d\n", rc, jitc.dr[0]);
 		exit(1);
 	}
-//	*jitc.dst = -1; // 終端のための特殊opecode.
 	vm.ip  = j32buf;
 	vm.ip1 = jitc.dst;
 
 	apiInit(&vm);
-//	for (i = 1; i < argc; i++) {
-//		if (strcmp(argv[i], "-col3bgr") == 0)
-//			apiWork.col3bgr = 1;
-//	}
 	rc = execAll(&vm);
 	if (rc != EXEC_SRC_OVERRUN) {
 		fprintf(stderr, "execAll()=%d, DR0=%d\n", rc, vm.dr[0]); // EXEC_SRC_OVERRUNなら成功.
@@ -134,13 +79,12 @@ void drv_flshWin(int sx, int sy, int x0, int y0);
 void drv_sleep(int msec);
 extern int *vram, v_xsiz, v_ysiz;
 extern int *keybuf, keybuf_r, keybuf_w, keybuf_c;
-extern char *toDebugMonitor;
 
 void apiInit(OsecpuVm *vm)
 {
 	int i, j;
 	for (i = 0; i <= 0x3f; i++) {
-		vm->r[i] = 0; vm->bit[i] = 32; // Rxx: すべて32ビットの0.
+		vm->r[i] = 0;  // Rxx: すべて32ビットの0.
 		vm->p[i].typ = PTR_TYP_INVALID; // Pxx: すべて不正.
 	}
 	j = 1;
@@ -153,18 +97,11 @@ void apiInit(OsecpuVm *vm)
 	}
 	vm->p[0x2f].typ = PTR_TYP_NATIVECODE;
 	vm->p[0x2f].p = (void *) &apiEntry;
-	vm->debugWatchIndex[0] = 0;
-	vm->debugWatchIndex[1] = 1;
-	vm->debugWatchs = 0;
 	apiWork.winClosed = 0;
 	apiWork.autoSleep = 0;
-//	apiWork.col3bgr = 0;
 	apiWork.lastConsoleChar = '\n';
-//	if (setjmp(apiWork.setjmpEnv) != 0)
-//		apiEnd(vm);
 	keybuf_r = keybuf_w = keybuf_c = 0;
 	keybuf = malloc(KEYBUFSIZ * sizeof (int));
-	toDebugMonitor = &(vm->toDebugMonitor);
 	return;
 }
 
@@ -212,7 +149,6 @@ const Int32 *apiEntry(OsecpuVm *vm)
 	jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
 fin: ;
 	const Int32 *retcode = NULL;
-	execStep_checkMemAccess(vm, 0x30, PTR_TYP_CODE, EXEC_CMA_FLAG_EXEC); // 主にliveSignのチェック.
 	if (vm->errorCode == 0)
 		retcode = (const Int32 *) vm->p[0x30].p;
 	return retcode;
@@ -224,26 +160,16 @@ void apiEnd(OsecpuVm *vm, Int32 retcode)
 	if (apiWork.autoSleep != 0) {
 		if (vram != 0)
 			drv_flshWin(v_xsiz, v_ysiz, 0, 0);
-		while (apiWork.winClosed == 0) {
+		while (apiWork.winClosed == 0)
 			drv_sleep(100);
-			if (vm->toDebugMonitor == 1)
-				execStepDebug(vm);
-		}
 	}
 	if (apiWork.lastConsoleChar != '\n')
 		putchar('\n');
-	if (vm->exitToDebug != 0) {
-		jitcSetRetCode(&vm->errorCode, EXEC_EXIT);
-		vm->toDebugMonitor = 1;
-		execStepDebug(vm);
-	}
 	exit(retcode);
 }
 
 Int32 apiGetRxx(OsecpuVm *vm, int r, int bit)
 {
-	if (vm->bit[r] != BIT_DISABLE_REG && vm->bit[r] < bit)
-		jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
 	return execStep_SignBitExtend(vm->r[r], bit - 1);
 }
 
@@ -631,7 +557,6 @@ void api000d_inkey(OsecpuVm *vm)
 	//  2:window(0)/stdin(1)
 	//	4: shift, lock系を有効化.
 	//	8: 左右のshift系を区別する.
-	vm->bit[0x30] = 32;
 	vm->r[0x30] = -1;
 	if (2 <= mod && mod <= 3) {
 		vm->r[0x30] = fgetc(stdin);
@@ -654,7 +579,6 @@ void api000d_inkey(OsecpuVm *vm)
 			keybuf_r = (keybuf_r + 1) & (KEYBUFSIZ - 1);
 		}
 	}
-	vm->bit[0x31] = vm->bit[0x32] = 32;
 	vm->r[0x31] = vm->r[0x31] = 0;
 	if (vm->r[0x30] == 4132) vm->r[0x31]--;
 	if (vm->r[0x30] == 4133) vm->r[0x32]--;

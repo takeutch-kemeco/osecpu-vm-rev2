@@ -1,0 +1,2 @@
+gcc -D__linux__ -o osecpu-m osecpu-vm.c other.c integer.c pointer.c float.c extend.c api.c driver.c `pkg-config blike --libs --cflags`
+こんな感じでビルドできると思います・・・
