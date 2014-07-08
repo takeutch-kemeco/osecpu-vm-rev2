@@ -251,7 +251,9 @@ fin:
 }
 
 typedef struct _StackHeader {
-	int totalSize, r1, bitR, p1, f1, bitF;
+	int totalSize;
+	char *prevStackTop;
+	int r1, bitR, p1, f1, bitF;
 	PReg p30;
 	Int32 *r0p;
 	unsigned char *bitR0p;
@@ -288,7 +290,7 @@ int osecpuVmStackPush(OsecpuVm *vm, int r1, int bitR, int p1, int f1, int bitF)
 	int f1Size = f1 * sizeof (double), bitSize = (r1 + f1) * sizeof (unsigned char);
 	int totalSize, i, bit;
 	StackHeader *psh;
-	char *p;
+	char *p, *prevStackTop;
 	r1Size  = (r1Size  + 15) & -16;
 	p1Size  = (p1Size  + 15) & -16;
 	f1Size  = (f1Size  + 15) & -16;
@@ -296,11 +298,13 @@ int osecpuVmStackPush(OsecpuVm *vm, int r1, int bitR, int p1, int f1, int bitF)
 	totalSize = STACKHEADERSIZE16 + r1Size + p1Size + f1Size + bitSize;
 	if (vm->stack0 + totalSize > vm->stack1) goto fin;
 	p = vm->stack0;
+	prevStackTop = vm->stackTop;
 	vm->stack0 += totalSize;
 	vm->stackTop = p;
 	psh = (StackHeader *) p;
 	p += STACKHEADERSIZE16;
 	psh->totalSize = totalSize;
+	psh->prevStackTop = prevStackTop;
 	psh->r1 = r1;
 	psh->bitR = bitR;
 	psh->p1 = p1;
@@ -371,30 +375,34 @@ int osecpuVmStackPull(OsecpuVm *vm, int r1, int bitR, int p1, int f1, int bitF)
 	}
 	vm->p[0x30] = psh->p30;
 	vm->stack0 -= psh->totalSize;
-	vm->stackTop = vm->stack0;
+	vm->stackTop = psh->prevStackTop;
 	retcode = 0;
 fin:
 	return retcode;
 }
 
 typedef struct _TallocHeader {
-	int totalSize, r1, typ, len; // r1は-1にする.
+	int totalSize;
+	char *prevStackTop;
+	int r1, typ, len; // r1は-1にする.
 } TallocHeader;
 
 #define TALLOCHEADERSIZE16	((sizeof (TallocHeader) + 15) & -16)	// サイズを16バイト単位に切り上げたもの.
 
 char *osecpuVmStackAlloc(OsecpuVm *vm, int totalSize, int typ, int len)
 {
-	char *p = NULL;
+	char *p = NULL, *prevStackTop;
 	TallocHeader *pth;
 	totalSize = ((totalSize + 15) & -16) + TALLOCHEADERSIZE16;
 	if (vm->stack0 + totalSize > vm->stack1) goto fin;
 	p = vm->stack0;
+	prevStackTop = vm->stackTop;
 	vm->stack0 += totalSize;
 	vm->stackTop = p;
 	pth = (TallocHeader *) p;
 	p += TALLOCHEADERSIZE16;
 	pth->totalSize = totalSize;
+	pth->prevStackTop = prevStackTop;
 	pth->r1 = -1;	// talloc mark.
 	pth->typ = typ;
 	pth->len = len;
@@ -409,7 +417,7 @@ int osecpuVmStackFree(OsecpuVm *vm, int totalSize, char *p, int typ, int len)
 	totalSize = ((totalSize + 15) & -16) + TALLOCHEADERSIZE16;
 	if (pth->totalSize != totalSize || pth->r1 != -1 || pth->typ != typ || pth->len != len || (p - TALLOCHEADERSIZE16) != vm->stackTop) goto fin;
 	vm->stack0 -= totalSize;
-	vm->stackTop = vm->stack0;
+	vm->stackTop = pth->prevStackTop;
 	retcode = 0;
 fin:
 	return retcode;

@@ -46,3 +46,6 @@ ver.1.14:
 ver.1.15:
   vm-m32を追加。osectolsにb32ツールを追加。
 
+ver.1.16:
+  Enter/Leave, talloc/tfreeに関するバグを修正。
+

@@ -33,14 +33,14 @@ typedef struct _OsecpuJitc {
 		// dstLog[]‚Í–½—ß‚ğ­‚µ‚³‚©‚Ì‚Ú‚è‚½‚¢‚Æ‚«‚Ég‚¤.
 		//   ‚½‚Æ‚¦‚Îdata(2E)‚ª—˜—p‚·‚é.
 	int errorCode, instrLength;
-	Int32 dr[4]; // Integer
+	Int32 dr[4]; // Other
 	Int32 *ope04; // Integer
-	unsigned char prefix2f[PREFIX2F_SIZE]; // Integer
+	unsigned char prefix2f[PREFIX2F_SIZE];
 } OsecpuJitc;
 
 typedef struct _OsecpuVm {
 	Int32 r[0x40]; // Integer
-	Int32 dr[4]; // Integer
+	Int32 dr[4]; // Other
 	double f[0x40]; // Float
 	PReg p[0x40]; // Pointer
 	const Int32 *ip, *ip1; /* instruction-pointer, program-counter */
