@@ -68,11 +68,14 @@ int execAll(VM *vm);
 
 #define EXEC_BAD_BITS			1
 #define EXEC_BITS_RANGE_OVER	2
+#define EXEC_BAD_R2				3	// SBX, SHL, SARのr2が不適切.
+#define EXEC_DIVISION_BY_ZERO	4
+#define EXEC_SRC_OVERRUN		5
 #define EXEC_ABORT_OPECODE_M1	0xffff
 
 // JITコンパイラとVMインタプリタの双方に必要な関数は、jitc.cのほうにおく.
 
-// hh4.c : hh4関係
+// hh4.c : hh4関係.
 void hh4Init(HH4Reader *hh4r, void *p, int half, void *p1);
 int hh4Get4bit(HH4Reader *hh4r);
 Int32 hh4GetUnsigned(HH4Reader *hh4r);
@@ -80,5 +83,9 @@ Int32 hh4GetSigned(HH4Reader *hh4r);
 Int32 *hh4Decode(Jitc *jitc);
 unsigned char *hh4StrToBin(unsigned char *src, unsigned char *src1, unsigned char *dst, unsigned char *dst1);
 
-
+// extend.c : 拡張命令関係.
+Int32 *ext_hh4Decode(Jitc *jitc, Int32 opecode);
+int ext_instrLength(const Int32 *src, const Int32 *src1);
+int ext_jitcStep(Jitc *jitc);
+void ext_execStep(VM *vm);
 

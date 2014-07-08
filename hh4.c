@@ -112,7 +112,13 @@ Int32 *hh4Decode(Jitc *jitc)
 			if (0 <= dst[2] && dst[2] <= 3)
 				jitc->dr[dst[2]] = dst[1];
 			dst += 3;
+			continue;
 		}
+		jitc->hh4dst = dst;
+		dst = ext_hh4Decode(jitc, opecode);
+		if (dst != jitc->hh4dst)
+			continue; // ‰½‚©ˆ—‚Å‚«‚½‚æ‚¤‚È‚Ì‚ÅŸ‚Ö.
+
 		fprintf(stderr, "Error: hh4Decode: opecode=0x%02X\n", opecode); // “à•”ƒGƒ‰[.
 		exit(1);
 	}
