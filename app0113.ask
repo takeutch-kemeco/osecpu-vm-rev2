@@ -1,0 +1,30 @@
+#include "osecpu_ask.h"
+
+	do {
+		VPtr p:P01;
+		Int32s i:R00, j:R01, v:R02;
+
+		// ‰Šú‰».
+		api_malloc(p, T_UINT1, 1000);
+		v = 0;
+		for (i = 0; i != 1000; i++) {
+			PASMEM0(32, v, T_UINT1, p, i);
+		}
+
+		// ”{”‚Éˆó‚ð‚Â‚¯‚Ä‚¢‚­.
+		v = 1;
+		for (i = 2; i != 1000; i++) {
+			for (j = i * 2; ; j += i) {
+				if (j >= 1000) break;
+				PASMEM0(32, v, T_UINT1, p, j);
+			}
+		}
+
+		for (i = 2; i != 1000; i++) {
+			PALMEM0(32, v, T_UINT1, p, i);
+			if (v == 0) {
+				api_putStringDec('\1 ', i, 3, 1);
+			}
+		}
+	}
+

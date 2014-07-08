@@ -30,7 +30,7 @@ void getTypSize(int typ, int *typSize0, int *typSize1, int *typSign)
 int jitcStepPointer(OsecpuJitc *jitc)
 {
 	Int32 *ip = jitc->hh4Buffer;
-	Int32 opecode = ip[0], imm;
+	Int32 opecode = ip[0];
 	int retcode = -1, *pRC = &retcode;
 	int i, j, opt, p, p0, p1, r, bit, typ, len, typSign, typSize0, typSize1;
 	if (opecode == 0x01) { /* LB(opt, uimm); */
@@ -271,7 +271,7 @@ void execStep_checkMemAccess(OsecpuVm *vm, int p, int typ, int flag)
 
 void execStep_plimm(OsecpuVm *vm, int p, int i)
 {
-	int r, p0, p1, bit, typ, len, typSign, typSize0, typSize1;
+	int typ, len, typSign, typSize0, typSize1;
 	typ = vm->defines->label[i].typ;
 	vm->p[p].typ = typ;
 	if (typ >= 2) {

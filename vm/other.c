@@ -12,7 +12,7 @@ int jitcStepOther(OsecpuJitc *jitc)
 {
 	Int32 *ip = jitc->hh4Buffer;
 	Int32 opecode = ip[0], imm;
-	int bit, bit0, bit1, r, r0, r1, r2, p, typ, f;
+	int bit0, bit1, r, p, typ, f;
 	int retcode = -1, *pRC = &retcode;
 	int i, j;
 	if (opecode == 0x00) { /* NOP */
@@ -130,7 +130,7 @@ int jitcAfterStepOther(OsecpuJitc *jitc)
 				retcode = JITC_BAD_PREFIX;
 		}
 	}
-	return 0;
+	return retcode;
 }
 
 int osecpuVmStackPush(OsecpuVm *vm, int r1, int bitR, int p1, int f1, int bitF);
@@ -142,8 +142,7 @@ void execStepOther(OsecpuVm *vm)
 {
 	const Int32 *ip = vm->ip;
 	Int32 opecode = ip[0], imm;
-	int bit, bit0, bit1, r, r0, r1, r2, p, f, typ, typSign, typSize0, typSize1;
-	int i, mbit, tbit;
+	int bit0, bit1, r, p, f, typ, typSign, typSize0, typSize1, i;
 	if (opecode == 0x00) { // NOP();
 		ip++;
 		goto fin;
@@ -156,8 +155,8 @@ void execStepOther(OsecpuVm *vm)
 	}
 	if (opecode == 0x30) {
 		typ = ip[1]; bit0 = ip[2]; r = ip[3]; bit1 = ip[4]; p = ip[5];
-		typ = apiGetRxx(vm, typ, bit0);
-		i = apiGetRxx(vm, r, bit1);
+		typ = execStep_getRxx(vm, typ, bit0);
+		i = execStep_getRxx(vm, r, bit1);
 		getTypSize(typ, &typSize0, &typSize1, &typSign);
 		if (i < 0 || typSize0 < 0 || i > 256 * 1024 * 1024)
 			jitcSetRetCode(&vm->errorCode, EXEC_STACK_ALLOC_ERROR);
@@ -178,8 +177,8 @@ void execStepOther(OsecpuVm *vm)
 	}
 	if (opecode == 0x31) {
 		p = ip[1]; typ = ip[2]; bit0 = ip[3]; r = ip[4]; bit1 = ip[5]; 
-		typ = apiGetRxx(vm, typ, bit0);
-		i = apiGetRxx(vm, r, bit1);
+		typ = execStep_getRxx(vm, typ, bit0);
+		i = execStep_getRxx(vm, r, bit1);
 		getTypSize(typ, &typSize0, &typSize1, &typSign);
 		if (i < 0 || typSize0 < 0 || i > 256 * 1024 * 1024)
 			jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
@@ -188,11 +187,14 @@ void execStepOther(OsecpuVm *vm)
 				jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
 				goto fin;
 			}
-			r = (vm->p[p].p - vm->p[p].p0) / typSize1;
-			r = osecpuVmStackFree(vm, i, vm->p[p].bit - r, 0, i);
+			if (vm->p[p].p != vm->p[p].p0) {
+				jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
+				goto fin;
+			}
+			r = osecpuVmStackFree(vm, i, vm->p[p].bit, 0, i);
 			if (r != 0)
 				jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
-			r = osecpuVmStackFree(vm, typSize1 * i, vm->p[p].p0, typ, i);
+			r = osecpuVmStackFree(vm, typSize1 * i, vm->p[p].p, typ, i);
 			if (r != 0)
 				jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
 		} else {
@@ -208,8 +210,8 @@ void execStepOther(OsecpuVm *vm)
 	}
 	if (opecode == 0x32) {
 		typ = ip[1]; bit0 = ip[2]; r = ip[3]; bit1 = ip[4]; p = ip[5];
-		typ = apiGetRxx(vm, typ, bit0);
-		i = apiGetRxx(vm, r, bit1);
+		typ = execStep_getRxx(vm, typ, bit0);
+		i = execStep_getRxx(vm, r, bit1);
 		getTypSize(typ, &typSize0, &typSize1, &typSign);
 		if (i < 0 || typSize0 < 0 || i > 256 * 1024 * 1024)
 			jitcSetRetCode(&vm->errorCode, EXEC_STACK_ALLOC_ERROR);
@@ -436,3 +438,5 @@ int osecpuVmStackFree(OsecpuVm *vm, int totalSize, char *p, int typ, int len)
 fin:
 	return retcode;
 }
+
+

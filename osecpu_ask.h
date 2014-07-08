@@ -22,9 +22,13 @@
 #define api_putStringDec0(s, reg, width, opt)		REM01(); R30=0x0001; REM09(1); REM38(0,0,T_UINT8,R31,P31); DB%(s,0x00); REM38(1,3,T_SINT32,R32,P32); DDBE(4,-1,width,opt,API_REG+(reg&0x3f)); R33=0; R34=0; PCALL(P2F)
 #define api_putStringDec6(s, reg, width, opt)		REM01(); R30=0x0001; REM09(1); REM38(6,0,T_UINT8,R31,P31); DB%(s,0x00); REM38(1,3,T_SINT32,R32,P32); DDBE(4,-1,width,opt,API_REG+(reg&0x3f)); R33=0; R34=0; PCALL(P2F)
 #define api_putStringDec(s, reg, width, opt)		api_putStringDec6(s, reg, width, opt)
+#define api_putStringDec6_2(s, reg0, width0, opt0, reg1, width1, opt1)		REM01(); R30=0x0001; REM09(1); REM38(6,0,T_UINT8,R31,P31); DB%(s,0x00); REM38(1,3,T_SINT32,R32,P32); DDBE(4,-1,width0,opt0,API_REG+(reg0&0x3f),-1,width1,opt1,API_REG+(reg1&0x3f)); R33=0; R34=0; PCALL(P2F)
+#define api_putStringDec_2(s, reg0, width0, opt0, reg1, width1, opt1)		api_putStringDec6_2(s, reg0, width0, opt0, reg1, width1, opt1)
 #define api_putStringHex0(s, reg, width, opt)		REM01(); R30=0x0001; REM09(1); REM38(0,0,T_UINT8,R31,P31); DB%(s,0x00); REM38(1,3,T_SINT32,R32,P32); DDBE(4,0,width,opt,API_REG+(reg&0x3f)); R33=0; R34=0; PCALL(P2F)
 #define api_putStringHex6(s, reg, width, opt)		REM01(); R30=0x0001; REM09(1); REM38(6,0,T_UINT8,R31,P31); DB%(s,0x00); REM38(1,3,T_SINT32,R32,P32); DDBE(4,0,width,opt,API_REG+(reg&0x3f)); R33=0; R34=0; PCALL(P2F)
 #define api_putStringHex(s, reg, width, opt)		api_putStringHex6(s, reg, width, opt)
+#define api_putStringHex6_2(s, reg0, width0, opt0, reg1, width1, opt1)		REM01(); R30=0x0001; REM09(1); REM38(6,0,T_UINT8,R31,P31); DB%(s,0x00); REM38(1,3,T_SINT32,R32,P32); DDBE(4,0,width0,opt0,API_REG+(reg0&0x3f),0,width1,opt1,API_REG+(reg1&0x3f)); R33=0; R34=0; PCALL(P2F)
+#define api_putStringHex_2(s, reg0, width0, opt0, reg1, width1, opt1)		api_putStringHex6_2(s, reg0, width0, opt0, reg1, width1, opt1)
 #define api_drawString0(mod, c, xsiz, ysiz, x0, y0, s)	REM01(); R30=0x0006; REM09(0); R31=mod; R32=c; R33=xsiz; R34=ysiz; R35=x0; R36=y0; REM38(0,0,T_UINT8,R37,P31); DB%(s,0x00); R38=0; R39=0; R3A=0; PCALL(P2F)
 #define api_drawString3(mod, c, xsiz, ysiz, x0, y0, s)	REM01(); R30=0x0006; REM09(0); R31=mod; R32=c; R33=xsiz; R34=ysiz; R35=x0; R36=y0; REM38(3,0,T_UINT8,R37,P31); DB%(s,0x00); R38=0; R39=0; R3A=0; PCALL(P2F)
 #define api_drawString5(mod, c, xsiz, ysiz, x0, y0, s)	REM01(); R30=0x0006; REM09(0); R31=mod; R32=c; R33=xsiz; R34=ysiz; R35=x0; R36=y0; REM38(5,0,T_UINT8,R37,P31); DB%(s,0x00); R38=0; R39=0; R3A=0; PCALL(P2F)
@@ -34,9 +38,16 @@
 #define api_drawStringDec0(mod, c, xsiz, ysiz, x0, y0, s, reg, width, opt)	REM01(); R30=0x0006; REM09(1); R31=mod; R32=c; R33=xsiz; R34=ysiz; R35=x0; R36=y0; REM38(0,0,T_UINT8,R37,P31); DB%(s,0x00); REM38(1,3,T_SINT32,R38,P32); DDBE(4,-1,width,opt,API_REG+(reg&0x3f)); R39=0; R3A=0; PCALL(P2F)
 #define api_drawStringDec6(mod, c, xsiz, ysiz, x0, y0, s, reg, width, opt)	REM01(); R30=0x0006; REM09(1); R31=mod; R32=c; R33=xsiz; R34=ysiz; R35=x0; R36=y0; REM38(6,0,T_UINT8,R37,P31); DB%(s,0x00); REM38(1,3,T_SINT32,R38,P32); DDBE(4,-1,width,opt,API_REG+(reg&0x3f)); R39=0; R3A=0; PCALL(P2F)
 #define api_drawStringDec(mod, c, xsiz, ysiz, x0, y0, s, reg, width, opt)	api_drawStringDec6(mod, c, xsiz, ysiz, x0, y0, s, reg, width, opt)
+#define api_drawStringDec6_2(mod, c, xsiz, ysiz, x0, y0, s, reg0, width0, opt0, reg1, width1, opt1)	REM01(); R30=0x0006; REM09(1); R31=mod; R32=c; R33=xsiz; R34=ysiz; R35=x0; R36=y0; REM38(6,0,T_UINT8,R37,P31); DB%(s,0x00); REM38(1,3,T_SINT32,R38,P32); DDBE(8,-1,width0,opt0,API_REG+(reg0&0x3f),-1,width1,opt1,API_REG+(reg1&0x3f)); R39=0; R3A=0; PCALL(P2F)
+#define api_drawStringDec_2(mod, c, xsiz, ysiz, x0, y0, s, reg0, width0, opt0, reg1, width1, opt1)	api_drawStringDec6_2(mod, c, xsiz, ysiz, x0, y0, s, reg0, width0, opt0, reg1, width1, opt1)
 #define api_drawStringHex0(mod, c, xsiz, ysiz, x0, y0, s, reg, width, opt)	REM01(); R30=0x0006; REM09(1); R31=mod; R32=c; R33=xsiz; R34=ysiz; R35=x0; R36=y0; REM38(0,0,T_UINT8,R37,P31); DB%(s,0x00); REM38(1,3,T_SINT32,R38,P32); DDBE(4,0,width,opt,API_REG+(reg&0x3f)); R39=0; R3A=0; PCALL(P2F)
 #define api_drawStringHex6(mod, c, xsiz, ysiz, x0, y0, s, reg, width, opt)	REM01(); R30=0x0006; REM09(1); R31=mod; R32=c; R33=xsiz; R34=ysiz; R35=x0; R36=y0; REM38(6,0,T_UINT8,R37,P31); DB%(s,0x00); REM38(1,3,T_SINT32,R38,P32); DDBE(4,0,width,opt,API_REG+(reg&0x3f)); R39=0; R3A=0; PCALL(P2F)
 #define api_drawStringHex(mod, c, xsiz, ysiz, x0, y0, s, reg, width, opt)	api_drawStringHex6(mod, c, xsiz, ysiz, x0, y0, s, reg, width, opt)
+#define api_drawStringHex6_2(mod, c, xsiz, ysiz, x0, y0, s, reg0, width0, opt0, reg1, width1, opt1)	REM01(); R30=0x0006; REM09(1); R31=mod; R32=c; R33=xsiz; R34=ysiz; R35=x0; R36=y0; REM38(6,0,T_UINT8,R37,P31); DB%(s,0x00); REM38(1,3,T_SINT32,R38,P32); DDBE(8,0,width0,opt0,API_REG+(reg0&0x3f),0,width1,opt1,API_REG+(reg1&0x3f)); R39=0; R3A=0; PCALL(P2F)
+#define api_drawStringHex_2(mod, c, xsiz, ysiz, x0, y0, s, reg0, width0, opt0, reg1, width1, opt1)	api_drawStringHex6_2(mod, c, xsiz, ysiz, x0, y0, s, reg0, width0, opt0, reg1, width1, opt1)
+
+#define api_malloc(_p, typ, len)					R3A=len; R3B=typ; DB(0xb2); r(R3B); bit(32); r(R3A); bit(32); DB((_p&0x3f)+0x80)
+#define api_malloc_initInt(_p, typ, len, v0)		R3A=len; R3B=typ; DB(0xb2); r(R3B); bit(32); r(R3A); bit(32); DB((_p&0x3f)+0x80); P3E=_p; R39=v0;for(R3B=0;R3B!=R3A;R3B++){SMEM0PP(32, R39, typ, P3E);}
 
 #define API_REG		0x80520000
 

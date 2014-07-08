@@ -19,7 +19,6 @@ int jitcStepFloat(OsecpuJitc *jitc)
 {
 	Int32 *ip = jitc->srcBuffer;
 	Int32 opecode = ip[0];
-	int bit, bit0, bit1, r, f, f0, f1, f2;
 	int retcode = -1, *pRC = &retcode;
 	if (opecode == 0x40) {	// FLIMM
 		ip[1] = jitc->src[0];
@@ -87,8 +86,7 @@ void execStepFloat(OsecpuVm *vm)
 {
 	const Int32 *ip = vm->ip;
 	Int32 opecode = ip[0];
-	int bit, bit0, bit1, r, f, f0, f1, f2;
-	int i;
+	int bit, bit0, bit1, r, f, f0, f1, f2, i;
 	if (opecode == 0x40) {
 		if (ip[1] == 0) {
 			f = ip[3]; bit = ip[4];
@@ -128,6 +126,7 @@ void execStepFloat(OsecpuVm *vm)
 	}
 	if (0x48 <= opecode && opecode <= 0x4d) {
 		f1 = ip[1]; f2 = ip[2]; bit1 = ip[3]; r = ip[4]; bit0 = ip[5];
+		i = 0;	// gcc‚ÌŒx‚ð–Ù‚ç‚¹‚é‚½‚ß.
 		if (opecode == 0x48) i = vm->f[f1] == vm->f[f2];
 		if (opecode == 0x49) i = vm->f[f1] != vm->f[f2];
 		if (opecode == 0x4a) i = vm->f[f1] <  vm->f[f2];

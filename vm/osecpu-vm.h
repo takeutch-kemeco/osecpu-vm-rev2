@@ -170,7 +170,8 @@ Int32 execStep_checkBitsRange(Int32 value, int bit, OsecpuVm *vm, int bit1, int 
 void jitcStep_checkBits32(int *pRC, int bits);
 void jitcStep_checkRxx(int *pRC, int rxx);
 void jitcStep_checkRxxNotR3F(int *pRC, int rxx);
-Int32 execStep_SignBitExtend(Int32 value, int bit);
+Int32 execStep_signBitExtend(Int32 value, int bit);
+Int32 execStep_getRxx(OsecpuVm *vm, int r, int bit);
 
 // pointer.c : ポインタ命令.
 void jitcInitPointer(OsecpuJitc *jitc);
@@ -210,4 +211,7 @@ int decode_fcode(const unsigned char *p, const unsigned char *p1, unsigned char 
 // debug.c : デバッグモニター関係.
 char *debugJitcReport(OsecpuJitc *jitc, char *msg);
 void execStepDebug(OsecpuVm *vm);
+
+// tek.c : tek5展開関係.
+int tek_lzrestore_tek5(int srcsiz, unsigned char *src, int outsiz, unsigned char *outbuf);
 

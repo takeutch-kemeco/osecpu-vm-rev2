@@ -56,8 +56,7 @@ LB0(L_next_group);
 	for (;;) {
 		// âÊñ ÇçÏÇÈ.
 		api_fillRect(MODE_COL3, 0, -1, -1, 0, 0);
-		api_drawStringDec6(MODE_COL3, -1, 1, 1,  4 * 8 + 2, 0 * 16 + 2, 'SCORE:\1', score, 8, 2); PAD();
-		api_drawStringDec6(MODE_COL3, -1, 1, 1, 22 * 8 + 2, 0 * 16 + 2, 'HIGH:\1',  high,  8, 2); PAD();
+		api_drawStringDec_2(MODE_COL3, -1, 1, 1,  4 * 8 + 2, 0 * 16 + 2, 'SCORE:\1    HIGH:\1', score, 8, 2, high,  8, 2);
 		R04 = fx; R05 = 13; PLIMM(P02, L_fighter); R03 = 3; PAD(); R08 = 6; CALL(L_putchar);
 
 		for (i = 0; i != 6; i++) {

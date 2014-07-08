@@ -50,6 +50,9 @@ ver.1.16:
   Enter/Leave, talloc/tfreeに関するバグを修正。
 
 ver.1.17:
-  osectolsのdb2binがARRAY_PARAM()に対応。VMにapi_putcharやapi_putStringを追加。
+  osectolsのdb2binがREM38()に対応。VMにapi_putcharやapi_putStringを追加。
   このバージョンでは、vm-miniとvm-m32が機能的に追いついていません（osecpu118dで追いつかせます）。
-  
+
+ver.1.18:
+  vm-miniとvm-m32を、vmに追いつかせました。
+

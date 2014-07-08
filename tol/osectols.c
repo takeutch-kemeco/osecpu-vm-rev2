@@ -174,7 +174,7 @@ int main(int argc, const UCHAR **argv)
 			 "  aska   ver.0.20\n"//108
 			 "  prepro ver.0.01\n"
 			 "  lbstk  ver.0.04\n"//117
-			 "  db2bin ver.0.18\n"//117
+			 "  db2bin ver.0.19\n"//118
 			 "  disasm ver.0.02\n"
 			 "  appack ver.0.20\n"//110
 			 "  maklib ver.0.01\n"
@@ -182,7 +182,7 @@ int main(int argc, const UCHAR **argv)
 			 "  osastr ver.0.00\n"
 			 "  binstr ver.0.00\n"
 			 "  fcode  ver.0.00\n"
-			 "  b32    ver.0.00"  //115
+			 "  b32    ver.0.01"  //118
 		);
 		r = 1;
 	}
@@ -2573,7 +2573,7 @@ int db2binSub0(struct Work *w, const UCHAR **pp, UCHAR **qq)
 			"1imm(",				"DB(0xf7,0x88); DDBE(%0);", // 6bytes.
 			"1typ(",				"DB(0xf7,0x88); DDBE(%0);", // 6bytes.
 			"1r(",					"DB(%0+0x80);", // 1byte.
-			"1p(",					"DB(%0-0x40+0x80);", // 1byte.
+			"1p(",					"DB((%0&0x3f)+0x80);", // 1byte.
 			"1dr(",					"DB((%0&0x3f)+0x80);", // 1byte.
 
 			"0NOP(",				"DB(0xf0);",
@@ -2813,6 +2813,7 @@ int db2binSub2Len(const UCHAR *src)
 			fprintf(stderr, "db2binSub2Len: error: F0 (align 8bit) bit=%d len=%d\n", j, i);
 		i = 13 + ((i * j) >> 3);
 	}
+	if (0xb0 <= src[0] && src[0] <= 0xb3) i = 16;
 	if (src[0] == 0xbc && src[1] == 0xf7 && src[2] == 0x88) i = 37; // ENTER
 	if (src[0] == 0xbd && src[1] == 0xf7 && src[2] == 0x88) i = 37; // LEAVE
 	if (src[0] == 0xfc && src[1] == 0xfd && src[2] == 0xf7 && src[3] == 0x88 && src[8] == 0xf0) i = 9; // LIDR
@@ -5376,6 +5377,35 @@ err_bit32:
 			}
 			fprintf(stderr, "internal error: op=0x2e, typ=0x%02x\n", i);
 			exit(1);
+		}
+		if (0x30 <= i && i <= 0x33) {
+			if ((i & 1) == 0) {
+				j = appackSub3(&p, &inf, 1) | 0x76000000;
+				if (qi[-6] == 0x76000002 && qi[-5] == 0xfffff788 && qi[-3] == j) {
+					// ’¼‘O‚ÌLIMM–½—ß‚Åtyp‚ðÝ’è‚µ‚Ä‚¢‚½ê‡‚ÍC³‚·‚é.
+					k = qi[-4];
+					if (0x02 <= k && k <= 0x15)
+						k = 0x0006;
+					qi[-4] = k;
+				}
+				*qi++ = j;
+				*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			} else {
+				*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+				j = appackSub3(&p, &inf, 1) | 0x76000000;
+				if (qi[-7] == 0x76000002 && qi[-6] == 0xfffff788 && qi[-4] == j) {
+					// ’¼‘O‚ÌLIMM–½—ß‚Åtyp‚ðÝ’è‚µ‚Ä‚¢‚½ê‡‚ÍC³‚·‚é.
+					k = qi[-5];
+					if (0x02 <= k && k <= 0x15)
+						k = 0x0006;
+					qi[-5] = k;
+				}
+				*qi++ = j;
+			}
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;
+			continue;
 		}
 		if (0x3c <= i && i <= 0x3d) {	// ENTER(rn,bit0,pn,fn,bit1,0);‚È‚Ç.
 			*qi++ = appackSub3(&p, &inf, 1) | 0x76000000;

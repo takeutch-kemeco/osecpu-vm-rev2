@@ -7,7 +7,7 @@ typedef int Int32; // 32bit以上であればよい（64bit以上でもよい）.
 #define DEFINES_MAXLABELS	4096
 
 typedef struct _PReg {
-	unsigned char *p, *p0;
+	unsigned char *p;
 	int typ;
 } PReg;
 
@@ -120,7 +120,8 @@ void execStepInteger(OsecpuVm *vm);
 int getTypBitInteger(int typ);
 void getTypInfoInteger(int typ, int *typSize0, int *typSize1, int *typSign);
 void jitcStep_checkBits32(int *pRC, int bits);
-Int32 execStep_SignBitExtend(Int32 value, int bit);
+Int32 execStep_signBitExtend(Int32 value, int bit);
+Int32 execStep_getRxx(OsecpuVm *vm, int r, int bit);
 
 // pointer.c : ポインタ命令.
 void jitcInitPointer(OsecpuJitc *jitc);

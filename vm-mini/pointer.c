@@ -14,7 +14,6 @@ void getTypSize(int typ, int *typSize0, int *typSize1, int *typSign)
 	*typSize0 = *typSize1 = -1;
 	if (2 <= typ && typ <= 21) {
 		static unsigned char table[10] = { 8, 16, 32, 4, 2, 1, 12, 20, 24, 28 };
-		int bytes;
 		if ((typ & 1) == 0)
 			*typSign = -1; // typが偶数なら符号あり.
 		else
@@ -28,7 +27,7 @@ void getTypSize(int typ, int *typSize0, int *typSize1, int *typSign)
 int jitcStepPointer(OsecpuJitc *jitc)
 {
 	Int32 *ip = jitc->hh4Buffer;
-	Int32 opecode = ip[0], imm;
+	Int32 opecode = ip[0];
 	int retcode = -1, *pRC = &retcode;
 	int i, j, opt, p, p0, p1, r, bit, typ, len, typSign, typSize0, typSize1;
 	if (opecode == 0x01) { /* LB(opt, uimm); */
@@ -134,7 +133,7 @@ void execStepPointer(OsecpuVm *vm)
 {
 	const Int32 *ip = vm->ip;
 	Int32 opecode = ip[0];
-	int i, p, r, p0, p1, bit, typ, len, typSign, typSize0, typSize1;
+	int i, p, r, p0, p1, bit, typ, len;
 	if (opecode == 0x01) { /* LB(opt, uimm); */
 		ip += 3;
 		goto fin;
@@ -189,17 +188,14 @@ fin:
 
 void execStep_plimm(OsecpuVm *vm, int p, int i)
 {
-	int r, p0, p1, bit, typ, len, typSign, typSize0, typSize1;
+	int typ;
 	typ = vm->defines->label[i].typ;
 	vm->p[p].typ = typ;
 	if (typ >= 2) {
 		vm->p[p].p = (unsigned char *) (vm->defines->label[i].dst + 3);
-		vm->p[p].p0 = vm->p[p].p;
-		len = vm->defines->label[i].dst[2]; // 2e(data)のlenフィールド値.
 	}
 	if (typ == PTR_TYP_CODE) {	// コードラベル.
 		vm->p[p].p = (unsigned char *) vm->defines->label[i].dst;
-		vm->p[p].p0 = vm->p[p].p;
 	}
 	if (typ == 1) {		// VPtr.
 	}

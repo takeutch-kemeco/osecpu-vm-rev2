@@ -1,12 +1,9 @@
 #include "osecpu-vm.h"
 
-#include "tek.c"
-
-// 将来的には、このコードは上記のtek.cも含めてOSECPU-VMのバイトコードに移植される。
+// 将来的には、このコードはtek.cも含めてOSECPU-VMのバイトコードに移植される。
 // 現在は試行錯誤したいので、OSECPU-VM化していないだけ。
 
-
-// typedef unsigned char UCHAR;
+typedef unsigned char UCHAR;
 
 // upx関係.
 
@@ -84,8 +81,6 @@ fin:
 }
 
 // tek5関係.
-
-int tek_lzrestore_tek5(int srcsiz, UCHAR *src, int outsiz, UCHAR *outbuf);
 
 int decode_tek5(const UCHAR *p, const UCHAR *p1, UCHAR *q, UCHAR *q1)
 {
@@ -1087,7 +1082,7 @@ int fcode_fixLabelAbsolute(DecodeFcodeStr *s, int i, int imm, int min);
 
 int fcode_fixLabel(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1)
 {
-	int i, j, lastLabel, retcode = 0;
+	int i, j, lastLabel = -1, retcode = 0;
 	unsigned char *q, uimmHigh;
 
 	for (q = q0; q < q1; ) {

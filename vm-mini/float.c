@@ -160,6 +160,7 @@ void execStepFloat(OsecpuVm *vm)
 	}
 	if (0x48 <= opecode && opecode <= 0x4d) {
 		f1 = ip[1]; f2 = ip[2]; bit1 = ip[3]; r = ip[4]; bit0 = ip[5];
+		i = 0;	// gcc‚ÌŒx‚ð–Ù‚ç‚¹‚é‚½‚ß.
 		if (opecode == 0x48) i = vm->f[f1] == vm->f[f2];
 		if (opecode == 0x49) i = vm->f[f1] != vm->f[f2];
 		if (opecode == 0x4a) i = vm->f[f1] <  vm->f[f2];

@@ -38,10 +38,9 @@ void jitcInitInteger(OsecpuJitc *jitc)
 int jitcStepInteger(OsecpuJitc *jitc)
 {
 	Int32 *ip = jitc->srcBuffer;
-	Int32 opecode = ip[0], imm;
-	int bit, bit0, bit1, r, r0, r1, r2, p, typ;
+	Int32 opecode = ip[0];
+	int bit, r, p, typ, i;
 	int retcode = -1, *pRC = &retcode;
-	int i, j;
 	if (opecode == 0x02) { /* LIMM(fffff788, imm, r, bit); */
 		ip[1] = jitc->src[1];
 		ip[2] = jitc->src[2] & 0x00ffffff; 
@@ -121,15 +120,14 @@ int jitcAfterStepInteger(OsecpuJitc *jitc)
 		dst04[2] = (jitc->dst + jitc->instrLength) - (dst04 + 3); // 直後の命令の命令長.
 		jitc->ope04 = NULL;
 	}
-	return 0;
+	return retcode;
 }
 
 void execStepInteger(OsecpuVm *vm)
 {
 	const Int32 *ip = vm->ip;
-	Int32 opecode = ip[0], imm, i32, tmp32;
-	int bit, bit0, bit1, r, r0, r1, r2, p, typ, typSign, typSize0, typSize1;
-	int i, mbit, tbit, tmin, tmax;
+	Int32 opecode = ip[0], imm;
+	int bit, bit0, bit1, r, r0, r1, r2, p, typ, typSign, typSize0, typSize1, i, tmax;
 	if (opecode == 0x02) { // LIMM(imm, Rxx, bits);
 		imm = ip[1]; r = ip[2]; bit = ip[3]; 
 		vm->r[r] = imm;
@@ -155,6 +153,17 @@ void execStepInteger(OsecpuVm *vm)
 		Int32 *pi;
 		r = ip[1]; bit = ip[2]; p = ip[3]; typ = ip[4]; i = ip[5];
 		i = vm->r[r];
+		if (vm->prefix2f[0] != 0) {
+			// 2F-0: マスクライト.
+			getTypInfoInteger(typ, &typSize0, &typSize1, &typSign);
+			if (typSize0 < 32) {
+				if (typSign == 0) {
+					tmax = (1 << typSize0) - 1;
+					i &= tmax;
+				} else
+					i = execStep_signBitExtend(i, typSize0 - 1);
+			}
+		}
 		pi = (Int32 *) vm->p[p].p;
 		*pi = i;
 		vm->prefix2f[0] = 0;
@@ -176,7 +185,7 @@ void execStepInteger(OsecpuVm *vm)
 	}
 	if (opecode == 0x13) {	// SBX.
 		r1 = ip[1]; r0 = ip[3]; bit = ip[4];
-		vm->r[r0] = execStep_SignBitExtend(vm->r[r1], vm->r[0x3f] - 1);
+		vm->r[r0] = execStep_signBitExtend(vm->r[r1], vm->r[0x3f] - 1);
 		ip += 5;
 		goto fin;
 	}
@@ -205,6 +214,7 @@ void execStepInteger(OsecpuVm *vm)
 	}
 	if (0x20 <= opecode && opecode <= 0x27) {
 		r1 = ip[1]; r2 = ip[2]; bit1 = ip[3]; r0 = ip[4]; bit0 = ip[5];
+		i = 0;	// gccの警告を黙らせるため.
 		if (opecode == 0x20)
 			i = vm->r[r1] == vm->r[r2];
 		if (opecode == 0x21)
@@ -241,7 +251,7 @@ void jitcStep_checkBits32(int *pRC, int bits)
 	return;
 }
 
-Int32 execStep_SignBitExtend(Int32 value, int bit)
+Int32 execStep_signBitExtend(Int32 value, int bit)
 // bitは符号ビットのある位置で、0～31を想定.
 {
 	if (bit >= 0) {
@@ -256,5 +266,10 @@ Int32 execStep_SignBitExtend(Int32 value, int bit)
 	} else
 		value = 0; // bitが負の場合.
 	return value;
+}
+
+Int32 execStep_getRxx(OsecpuVm *vm, int r, int bit)
+{
+	return execStep_signBitExtend(vm->r[r], bit - 1);
 }
 

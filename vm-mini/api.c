@@ -25,7 +25,7 @@ int OsecpuMain(int argc, const unsigned char **argv)
 	OsecpuVm vm;
 	unsigned char *byteBuf0 = malloc(BUFFER_SIZE);
 	Int32 *j32buf = malloc(BUFFER_SIZE * sizeof (Int32));
-	int fileSize, rc, i;
+	int fileSize, rc;
 	int stackSize = 1; /* メガバイト単位 */
 	FILE *fp;
 	jitc.defines = &defs;
@@ -105,7 +105,7 @@ void apiInit(OsecpuVm *vm)
 	return;
 }
 
-Int32 apiGetRxx(OsecpuVm *vm, int r, int bit);
+Int32 execStep_getRxx(OsecpuVm *vm, int r, int bit);
 
 void api0001_putString(OsecpuVm *vm);
 void api0002_drawPoint(OsecpuVm *vm);
@@ -121,7 +121,7 @@ void api0010_openWin(OsecpuVm *vm);
 const Int32 *apiEntry(OsecpuVm *vm)
 // VMの再開地点を返す.
 {
-	int func = apiGetRxx(vm, 0x30, 16); // 下位16bitしかみない.
+	int func = execStep_getRxx(vm, 0x30, 16); // 下位16bitしかみない.
 	int i;
 	if (vm->errorCode != 0) goto fin;
 	if (setjmp(apiWork.setjmpErr) != 0) goto fin;
@@ -166,11 +166,6 @@ void apiEnd(OsecpuVm *vm, Int32 retcode)
 	if (apiWork.lastConsoleChar != '\n')
 		putchar('\n');
 	exit(retcode);
-}
-
-Int32 apiGetRxx(OsecpuVm *vm, int r, int bit)
-{
-	return execStep_SignBitExtend(vm->r[r], bit - 1);
 }
 
 static int iColor1[] = {
@@ -288,8 +283,8 @@ static unsigned char fontdata[] = {
 
 int apiLoadColor(OsecpuVm *vm, int rxx)
 {
-	int c = apiGetRxx(vm, rxx, 16), m, rr, gg, bb;
-	m = apiGetRxx(vm, 0x31, 2) & 3;
+	int c = execStep_getRxx(vm, rxx, 16), m, rr, gg, bb;
+	m = execStep_getRxx(vm, 0x31, 2) & 3;
 	if (m == 0x00) {
 	//	static col3_bgr_table[8] = { 0, 4, 2, 6, 1, 5, 3, 7 };
 		if (c < -1 || c > 7)
@@ -326,7 +321,7 @@ int apiLoadColor(OsecpuVm *vm, int rxx)
 		c = rr << 16 | gg << 8 | bb;
 	}
 	if (m == 0x03)
-		c = apiGetRxx(vm, rxx, 32);
+		c = execStep_getRxx(vm, rxx, 32);
 	if (vm->errorCode > 0)
 		longjmp(apiWork.setjmpErr, 1);
 	return c;
@@ -361,13 +356,97 @@ void apiFillRect(int modeC, int x0, int y0, int x1, int y1, int c)
 	return;
 }
 
-void api0001_putString(OsecpuVm *vm) { }
+int apiSprintf(int buflen, unsigned char *buf, unsigned char *p, unsigned char *p1, int charLen, Int32 *q, Int32 *q1, OsecpuVm *vm)
+// %sや%fへの対応は将来の課題.
+// b32の時のみcharLen!=1を許す(T_SINT32になるため)...だから常に任意の型を受け付けているわけではない.
+{
+	int i = 0, base, v, j;
+	unsigned char c, sign;
+	while (p < p1) {
+		if (i >= buflen) {
+err:
+			jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
+			longjmp(apiWork.setjmpErr, 1);
+		}
+		c = *p;
+		p += charLen;
+		if (c == 0x00 || c == 0x7f) continue;
+		if (0x10 <= c && c <= 0x1f)
+			c = "0123456789ABCDEF"[c & 0x0f];
+		if (c >= 0x07) {
+			buf[i++] = c;
+			continue;
+		}
+		if (c == 0x01) {
+			// q[2] = 1:桁可変, 2:スペース化しない, 4:符号なし, 8:プラスの付与.
+			base = q[0];
+			sign = 0;
+			if (base ==  0) base = 16;
+			if (base == -1) base = 10;
+			if (i + q[1] > buflen) goto err;	// q[1]:桁の最大サイズ.
+			v = q[3]; // q[3]: value.
+			if ((q[2] & 4) == 0) {
+				// vは符号付き整数.
+				if ((q[2] & 8) != 0 && v > 0) sign = '+';
+				if (v < 0) { sign = '-'; v *= -1; }
+			} else {
+				// vは符号無し整数.
+				if ((q[2] & 8) != 0 && v != 0) sign = '+';
+			}
+			for (j = q[1] - 1; j >= 0; j--) {
+				buf[i + j] = "0123456789ABCDEF"[v % base];
+				v = ((unsigned) v) / base;
+			}
+			j = 0;
+			if ((q[2] & 2) == 0 && v == 0) {
+				for (j = 0; j < q[1] - 1; j++) {
+					if (buf[i + j] != '0') break;
+					buf[i + j] = ' ';
+				}
+			}
+			if (sign != 0) {
+				if (j > 0) j--;
+				buf[i + j] = sign;
+			}
+			if ((q[2] & 1) != 0 && buf[i] == ' ') {
+				for (v = 0; j + v < q[1]; v++)
+					buf[i + v] = buf[i + j + v];
+				i += v;
+			} else
+				i += q[1];
+			q += 4;
+			continue;
+		}
+		goto err;
+	}
+	return i;
+}
+
+void api0001_putString(OsecpuVm *vm)
+{
+	int len = execStep_getRxx(vm, 0x31, 32), i, charLen = sizeof (Int32);
+	int len32 = execStep_getRxx(vm, 0x32, 32);
+//	int len33 = execStep_getRxx(vm, 0x33, 32);
+//	int len34 = execStep_getRxx(vm, 0x34, 32);
+	Int32 *q, tmp32;
+	unsigned char *p = vm->p[0x31].p, buf[4096];
+	q = &tmp32;
+	if (len32 > 0) {
+		q = (Int32 *) vm->p[0x32].p;
+	}
+	i = apiSprintf(sizeof buf, buf, p, p + len * charLen, charLen, q, q + len32, vm);
+	if (i > 0) {
+		fwrite(buf, 1, i, stdout);
+		apiWork.lastConsoleChar = buf[i - 1];
+	}
+	return;
+}
 
 void api0002_drawPoint(OsecpuVm *vm)
 // Point(mode:R31, c:R32, x:R33, y:R34)
 {
-	int c = apiLoadColor(vm, 0x32), modeC = apiGetRxx(vm, 0x31, 4) & 0x0c;
-	int x = apiGetRxx(vm, 0x33, 16), y = apiGetRxx(vm, 0x34, 16);
+	int c = apiLoadColor(vm, 0x32), modeC = execStep_getRxx(vm, 0x31, 4) & 0x0c;
+	int x = execStep_getRxx(vm, 0x33, 16), y = execStep_getRxx(vm, 0x34, 16);
 	apiCheckPoint(vm, x, y);
 	if (modeC == 0x00) vram[x + y * v_xsiz]  = c;
 	if (modeC == 0x04) vram[x + y * v_xsiz] |= c;
@@ -378,9 +457,9 @@ void api0002_drawPoint(OsecpuVm *vm)
 
 void api0003_drawLine(OsecpuVm *vm)
 {
-	int c = apiLoadColor(vm, 0x32), modeC = apiGetRxx(vm, 0x31, 4) & 0x0c;
-	int x0 = apiGetRxx(vm, 0x33, 16), y0 = apiGetRxx(vm, 0x34, 16);
-	int x1 = apiGetRxx(vm, 0x35, 16), y1 = apiGetRxx(vm, 0x36, 16);
+	int c = apiLoadColor(vm, 0x32), modeC = execStep_getRxx(vm, 0x31, 4) & 0x0c;
+	int x0 = execStep_getRxx(vm, 0x33, 16), y0 = execStep_getRxx(vm, 0x34, 16);
+	int x1 = execStep_getRxx(vm, 0x35, 16), y1 = execStep_getRxx(vm, 0x36, 16);
 	int dx, dy, x, y, len, i;
 	if (1) { // クリッピングOFFの場合.
 		if (x0 == -1) x0 = v_xsiz - 1;
@@ -428,10 +507,10 @@ void api0003_drawLine(OsecpuVm *vm)
 void api0004_rect(OsecpuVm *vm)
 // Rect(mode:R31, c:R32, xsiz:R33, ysiz:R34, x0:R35, y0:R36)
 {
-	int c = apiLoadColor(vm, 0x32), mode = apiGetRxx(vm, 0x31, 6);
-	int xsiz = apiGetRxx(vm, 0x33, 16), ysiz = apiGetRxx(vm, 0x34, 16), x0, y0, x1, y1;
-	if (xsiz == -1) { xsiz = v_xsiz; x0 = 0; } else { x0 = apiGetRxx(vm, 0x35, 16); }
-	if (ysiz == -1) { ysiz = v_ysiz; y0 = 0; } else { y0 = apiGetRxx(vm, 0x36, 16); }
+	int c = apiLoadColor(vm, 0x32), mode = execStep_getRxx(vm, 0x31, 6);
+	int xsiz = execStep_getRxx(vm, 0x33, 16), ysiz = execStep_getRxx(vm, 0x34, 16), x0, y0, x1, y1;
+	if (xsiz == -1) { xsiz = v_xsiz; x0 = 0; } else { x0 = execStep_getRxx(vm, 0x35, 16); }
+	if (ysiz == -1) { ysiz = v_ysiz; y0 = 0; } else { y0 = execStep_getRxx(vm, 0x36, 16); }
 	if (ysiz == 0) ysiz = xsiz;
 //printf("c=%06X %d %d %d %d", c, xsiz, ysiz, x0, y0);
 	x1 = x0 + xsiz - 1;
@@ -453,12 +532,12 @@ void api0005_oval(OsecpuVm *vm)
 // Oval(mode:R31, c:R32, xsiz:R33, ysiz:R34, x0:R35, y0:R36)
 {
 	// これの計算精度はアーキテクチャに依存する.
-	int c = apiLoadColor(vm, 0x32), mode = apiGetRxx(vm, 0x31, 6);
-	int xsiz = apiGetRxx(vm, 0x33, 16), ysiz = apiGetRxx(vm, 0x34, 16), x0, y0, x1, y1;
+	int c = apiLoadColor(vm, 0x32), mode = execStep_getRxx(vm, 0x31, 6);
+	int xsiz = execStep_getRxx(vm, 0x33, 16), ysiz = execStep_getRxx(vm, 0x34, 16), x0, y0, x1, y1;
 	double dcx, dcy, dcxy, dtx, dty, dcx1, dcy1, dcxy1, dtx1, dty1;
 	int x, y, modeC;
-	if (xsiz == -1) { xsiz = v_xsiz; x0 = 0; } else { x0 = apiGetRxx(vm, 0x35, 16); }
-	if (ysiz == -1) { ysiz = v_ysiz; y0 = 0; } else { y0 = apiGetRxx(vm, 0x36, 16); }
+	if (xsiz == -1) { xsiz = v_xsiz; x0 = 0; } else { x0 = execStep_getRxx(vm, 0x35, 16); }
+	if (ysiz == -1) { ysiz = v_ysiz; y0 = 0; } else { y0 = execStep_getRxx(vm, 0x36, 16); }
 	if (ysiz == 0) ysiz = xsiz;
 	x1 = x0 + xsiz - 1;
 	y1 = y0 + ysiz - 1;
@@ -516,17 +595,81 @@ void api0005_oval(OsecpuVm *vm)
 	return;
 }
 
-void api0006_drawString(OsecpuVm *vm) { }
+void api0006_drawString(OsecpuVm *vm)
+{
+	int len = execStep_getRxx(vm, 0x37, 32), charLen = sizeof (Int32);
+	int len38 = execStep_getRxx(vm, 0x38, 32);
+//	int len39 = execStep_getRxx(vm, 0x39, 32);
+//	int len3a = execStep_getRxx(vm, 0x3a, 32);
+	Int32 *q, tmp32;
+	unsigned char *p = vm->p[0x31].p, buf[4096];
+	int c = apiLoadColor(vm, 0x32), modeC = execStep_getRxx(vm, 0x31, 4) & 0xc;
+	int sx = execStep_getRxx(vm, 0x33, 16), sy = execStep_getRxx(vm, 0x34, 16);
+	int x = execStep_getRxx(vm, 0x35, 16), y = execStep_getRxx(vm, 0x36, 16);
+	int x1, y1, i, ddx, ddy, j, ch, dx, dy;
+	if (sy == 0) sy = sx;
+	x1 = x + sx * 8;
+	y1 = y + sy * 16;
+	apiCheckPoint(vm, x, y);
+	apiCheckPoint(vm, x1, y1);
+	q = &tmp32;
+	if (len38 > 0) {
+		q = (Int32 *) vm->p[0x32].p;
+	}
+	len = apiSprintf(sizeof buf, buf, p, p + len * charLen, charLen, q, q + len38, vm);
+	if (len <= 0) goto fin;
+
+	if (modeC == 0x0 && sx == 1 && sy == 1) {
+		// メジャーケースを高速化.
+		for (i = 0; i < len; i++) {
+			ch = buf[i];
+			for (dy = 0; dy < 16; dy++) {
+				j = fontdata[(ch - ' ') * 16 + dy];
+				for (dx = 0; dx < 8; dx++) {
+					if ((j & (0x80 >> dx)) != 0) vram[(x + dx) + (y + dy) * v_xsiz] = c;
+				}
+			}
+			x += 8;
+		}
+		return;
+	}
+	for (i = 0; i < len; i++) {
+		ch = buf[i];
+		for (dy = 0; dy < 16; dy++) {
+			j = fontdata[(ch - ' ') * 16 + dy];
+			for (ddy = 0; ddy < sy; ddy++) {
+				for (dx = 0; dx < 8; dx++) {
+					if ((j & (0x80 >> dx)) != 0) {
+						for (ddx = 0; ddx < sx; ddx++) {
+							if (modeC == 0x0) vram[x + y * v_xsiz] =  c;
+							if (modeC == 0x4) vram[x + y * v_xsiz] |= c;
+							if (modeC == 0x8) vram[x + y * v_xsiz] ^= c;
+							if (modeC == 0xc) vram[x + y * v_xsiz] &= c;
+							x++;
+						}
+					} else
+						x += sx;
+				}
+				x -= sx * 8;
+				y++;
+			}
+		}
+		x += sx * 8;
+		y -= sy * 16;
+	}
+fin:
+	return;
+}
 
 void api0008_exit(OsecpuVm *vm)
 {
 	apiWork.autoSleep = 0;
-	apiEnd(vm, apiGetRxx(vm, 0x31, 32));
+	apiEnd(vm, execStep_getRxx(vm, 0x31, 32));
 }
 
 void api0009_sleep(OsecpuVm *vm)
 {
-	int mod = apiGetRxx(vm, 0x31, 16), msec = apiGetRxx(vm, 0x32, 32);
+	int mod = execStep_getRxx(vm, 0x31, 16), msec = execStep_getRxx(vm, 0x32, 32);
 	// 1:入力待ち.
 	// 2:flshの抑制.
 	if (msec == -1) {
@@ -552,7 +695,7 @@ void api0009_sleep(OsecpuVm *vm)
 
 void api000d_inkey(OsecpuVm *vm)
 {
-	int mod = apiGetRxx(vm, 0x31, 16);
+	int mod = execStep_getRxx(vm, 0x31, 16);
 	//  1:get(0)/peek(1)
 	//  2:window(0)/stdin(1)
 	//	4: shift, lock系を有効化.
@@ -588,14 +731,13 @@ fin:
 	return;
 }
 
-
 void api0010_openWin(OsecpuVm *vm)
 {
 	int i;
 	if (vram != 0)
 		jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
-	v_xsiz = apiGetRxx(vm, 0x31, 16);
-	v_ysiz = apiGetRxx(vm, 0x32, 16);
+	v_xsiz = execStep_getRxx(vm, 0x31, 16);
+	v_ysiz = execStep_getRxx(vm, 0x32, 16);
 	if (v_ysiz == 0) v_ysiz = v_xsiz;
 	if (v_xsiz <= 0 || 4096 < v_xsiz || v_ysiz < 0 || 4096 < v_ysiz)
 		jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);

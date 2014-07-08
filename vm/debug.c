@@ -67,7 +67,7 @@ void debugMonitor(OsecpuVm *vm)
 		if (i == EXEC_BITS_RANGE_OVER)	p = "Bit range over";
 		if (i == EXEC_SRC_OVERRUN)		p = "Code terminated";
 		if (i == EXEC_EXIT)				p = "Exit";
-		printf("dbg: VM: %s.\n", p);
+		printf("dbg: VM: %s. (ec=%03d)\n", p, i);
 	}
 	i = 0;
 	if (vm->ip < vm->ip1)

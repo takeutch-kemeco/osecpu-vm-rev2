@@ -12,7 +12,7 @@ int jitcStepOther(OsecpuJitc *jitc)
 {
 	Int32 *ip = jitc->hh4Buffer;
 	Int32 opecode = ip[0], imm;
-	int bit, bit0, bit1, r, r0, r1, r2, p, typ, f;
+	int bit0, bit1, r, p, typ, f;
 	int retcode = -1, *pRC = &retcode;
 	int i, j;
 	if (opecode == 0x00) { /* NOP */
@@ -108,7 +108,7 @@ int jitcAfterStepOther(OsecpuJitc *jitc)
 		for (i = 0; i < PREFIX2F_SIZE; i++)
 			jitc->prefix2f[i] = 0;
 	}
-	return 0;
+	return retcode;
 }
 
 int osecpuVmStackPush(OsecpuVm *vm, int r1, int bitR, int p1, int f1, int bitF);
@@ -120,8 +120,7 @@ void execStepOther(OsecpuVm *vm)
 {
 	const Int32 *ip = vm->ip;
 	Int32 opecode = ip[0], imm;
-	int bit, bit0, bit1, r, r0, r1, r2, p, f, typ, typSign, typSize0, typSize1;
-	int i, mbit, tbit;
+	int bit0, bit1, r, p, f, typ, typSign, typSize0, typSize1, i;
 	if (opecode == 0x00) { // NOP();
 		ip++;
 		goto fin;
@@ -134,43 +133,37 @@ void execStepOther(OsecpuVm *vm)
 	}
 	if (opecode == 0x30) {
 		typ = ip[1]; bit0 = ip[2]; r = ip[3]; bit1 = ip[4]; p = ip[5];
-		typ = apiGetRxx(vm, typ, bit0);
-		i = apiGetRxx(vm, r, bit1);
+		typ = execStep_getRxx(vm, typ, bit0);
+		i = execStep_getRxx(vm, r, bit1);
 		getTypSize(typ, &typSize0, &typSize1, &typSign);
 		if (i < 0 || typSize0 < 0 || i > 256 * 1024 * 1024)
 			jitcSetRetCode(&vm->errorCode, EXEC_STACK_ALLOC_ERROR);
 		vm->p[p].p = (unsigned char *) osecpuVmStackAlloc(vm, typSize1 * i, typ, i);
 		if (vm->p[p].p == NULL)
 			jitcSetRetCode(&vm->errorCode, EXEC_STACK_ALLOC_ERROR);
-		vm->p[p].p0 = vm->p[p].p;
 		vm->p[p].typ = typ;
 		ip += 6;
 		goto fin;
 	}
 	if (opecode == 0x31) {
 		p = ip[1]; typ = ip[2]; bit0 = ip[3]; r = ip[4]; bit1 = ip[5]; 
-		typ = apiGetRxx(vm, typ, bit0);
-		i = apiGetRxx(vm, r, bit1);
+		typ = execStep_getRxx(vm, typ, bit0);
+		i = execStep_getRxx(vm, r, bit1);
 		getTypSize(typ, &typSize0, &typSize1, &typSign);
-		if (i < 0 || typSize0 < 0 || i > 256 * 1024 * 1024)
-			jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
-		r = osecpuVmStackFree(vm, typSize1 * i, vm->p[p].p0, typ, i);
-		if (r != 0)
-			jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
+		r = osecpuVmStackFree(vm, typSize1 * i, NULL, typ, i);
 		ip += 6;
 		goto fin;
 	}
 	if (opecode == 0x32) {
 		typ = ip[1]; bit0 = ip[2]; r = ip[3]; bit1 = ip[4]; p = ip[5];
-		typ = apiGetRxx(vm, typ, bit0);
-		i = apiGetRxx(vm, r, bit1);
+		typ = execStep_getRxx(vm, typ, bit0);
+		i = execStep_getRxx(vm, r, bit1);
 		getTypSize(typ, &typSize0, &typSize1, &typSign);
 		if (i < 0 || typSize0 < 0 || i > 256 * 1024 * 1024)
 			jitcSetRetCode(&vm->errorCode, EXEC_STACK_ALLOC_ERROR);
 		vm->p[p].p = (unsigned char *) malloc(typSize1 * i);
 		if (vm->p[p].p == NULL)
 			jitcSetRetCode(&vm->errorCode, EXEC_MALLOC_ERROR);
-		vm->p[p].p0 = vm->p[p].p;
 		vm->p[p].typ = typ;
 		ip += 6;
 		goto fin;
@@ -246,7 +239,7 @@ int osecpuVmStackPush(OsecpuVm *vm, int r1, int bitR, int p1, int f1, int bitF)
 	int retcode = 1;
 	int r1Size = r1 * sizeof (Int32), p1Size = p1 * sizeof (PReg);
 	int f1Size = f1 * sizeof (double);
-	int totalSize, i, bit;
+	int totalSize, i;
 	StackHeader *psh;
 	char *p, *prevStackTop;
 	r1Size  = (r1Size  + 15) & -16;
@@ -338,7 +331,8 @@ int osecpuVmStackFree(OsecpuVm *vm, int totalSize, char *p, int typ, int len)
 	int retcode = 1;
 	TallocHeader *pth = (TallocHeader *) vm->stackTop;
 	totalSize = ((totalSize + 15) & -16) + TALLOCHEADERSIZE16;
-	if (pth->totalSize != totalSize || pth->r1 != -1 || pth->typ != typ || pth->len != len || (p - TALLOCHEADERSIZE16) != vm->stackTop) goto fin;
+	if (pth->totalSize != totalSize || pth->r1 != -1 || pth->typ != typ || pth->len != len) goto fin;
+	if (p != NULL && (p - TALLOCHEADERSIZE16) != vm->stackTop) goto fin;
 	vm->stack0 -= totalSize;
 	vm->stackTop = pth->prevStackTop;
 	retcode = 0;

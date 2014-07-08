@@ -136,7 +136,6 @@ static int winthread(void *dmy)
 {
 	WNDCLASSEX wc;
 	RECT r;
-	unsigned char *p, *p0, *p00;
 	int i, x, y;
 	MSG msg;
 
@@ -352,7 +351,6 @@ LRESULT CALLBACK WndProc(HWND hw, unsigned int msg, WPARAM wp, LPARAM lp)
 
 void drv_openWin(int sx, int sy, UCHAR *buf, char *winClosed)
 {
-	int i, x, y;
 //	if (sx <= 0 || sy <= 0) return;
 //	if (sx < 160) return;
 	w.win.buf = (int *) buf;
@@ -426,6 +424,9 @@ NSApplication* app;
   CGImageRef image = CGBitmapContextCreateImage(_context);
   CGContextRef currentContext = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
   CGContextDrawImage(currentContext, NSRectToCGRect(rect), image);
+  // bugfix: hinted by hikarupsp, 2014.03.15. thanks!
+  CGColorSpaceRelease(colorSpace);
+  CGImageRelease(image);
 }
  
 @end

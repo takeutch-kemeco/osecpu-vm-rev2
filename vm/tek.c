@@ -10,6 +10,8 @@ typedef unsigned char UCHAR;
 typedef unsigned int UINT32;
 typedef UINT32 tek_TPRB;
 
+#if 0
+
 static int tek_decode1(int siz, UCHAR *p, UCHAR *q);
 static int tek_decode2(int siz, UCHAR *p, UCHAR *q);
 static int tek_decode5(int siz, UCHAR *p, UCHAR *q);
@@ -27,8 +29,6 @@ static unsigned int tek_getnum_s7s(UCHAR **pp)
 	*pp = p;
 	return s;
 }
-
-#if 0
 
 int tek_getsize(unsigned char *p)
 {
