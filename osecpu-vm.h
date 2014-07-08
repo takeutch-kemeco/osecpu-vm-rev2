@@ -30,6 +30,11 @@ typedef struct _Hh4Reader {
 	int length, errorCode;
 } Hh4Reader;
 
+typedef struct _BitReader {
+	Hh4Reader *hh4r;
+	int bitBuf, bufLen;
+} BitReader;
+
 #define JITC_DSTLOG_SIZE	16
 
 typedef struct _OsecpuJitc {
@@ -68,6 +73,11 @@ Int32 hh4ReaderGetUnsigned(Hh4Reader *hh4r);
 Int32 hh4ReaderGetSigned(Hh4Reader *hh4r);
 Int32 hh4ReaderGet4Nbit(Hh4Reader *hh4r, int n);
 
+void bitReaderInit(BitReader *br, Hh4Reader *hh4r);
+int bitReaderGet(BitReader *br);
+int bitReaderGetNbitUnsigned(BitReader *br, int n);
+int bitReaderGetNbitSigned(BitReader *br, int n);
+
 void jitcInitDstLogSetPhase(OsecpuJitc *jitc, int phase);
 void jitcSetRetCode(int *pRC, int value);
 void jitcSetHh4BufferSimple(OsecpuJitc *jitc, int length);
@@ -89,6 +99,7 @@ int jitcAll(OsecpuJitc *jitc);
 #define JITC_LABEL_REDEFINED	13
 #define JITC_BAD_LABEL_TYPE		14
 #define JITC_LABEL_UNDEFINED	15
+#define JITC_BAD_TYPE			16
 
 void jitcStep_checkBits32(int *pRC, int bits);
 void jitcStep_checkRxx(int *pRC, int rxx);

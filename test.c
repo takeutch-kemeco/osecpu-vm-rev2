@@ -1,13 +1,14 @@
 #include "osecpu-vm.h"
 
+#define BUFFER_SIZE		256
+
 int main(int argc, const char **argv)
 {
 	Defines defs;
 	OsecpuJitc jitc;
 	OsecpuVm vm;
-	unsigned char hh4src[256], *hh4src1;
-	Int32 i32buf[256], j32buf[256];
-	definesInit(&defs);
+	unsigned char hh4src[BUFFER_SIZE], *hh4src1;
+	Int32 i32buf[BUFFER_SIZE], j32buf[BUFFER_SIZE];
 	jitc.defines = &defs;
 	vm.defines = &defs;
 
@@ -45,19 +46,23 @@ int main(int argc, const char **argv)
 		"c40 0 767fffff bf c40"			// FLIMM64(F3F, 0x7fffff);
 		"c49 5 bf c40 bf a0"			// FCMPNE32_64(R3F, F05, F3F);
 		"4 bf"							// CND(R3F);
-		"3 1 bf",						// PLIMM(P3F, 1);
-		NULL, hh4src, &hh4src[256]
+		"3 1 bf"						// PLIMM(P3F, 1);
+
+		"2 0 3 0"						// LIMM0(R03, 0);
+		"90 3 3 3 a0",					// CP32(R03, R03); // ここでエラーコード1になる.
+		NULL, hh4src, &hh4src[BUFFER_SIZE]
 	);
 
 	if (hh4src1 == NULL) {
 		printf("hh4src1 == NULL\n");
 		return 1;
 	}
+	printf("hh4src1 - hh4src = %d\n", hh4src1 - hh4src);
 
 	// jitcAll()を使って、hh4src[]内のプログラムをj32buf[]に変換する.
-	hh4ReaderInit(&jitc.hh4r, hh4src, 0, hh4src1, 1);
+	hh4ReaderInit(&jitc.hh4r, hh4src, 0, hh4src1, 0);
 	jitc.dst  =  j32buf;
-	jitc.dst1 = &j32buf[256];
+	jitc.dst1 = &j32buf[BUFFER_SIZE];
 	printf("jitcAll()=%d\n", jitcAll(&jitc)); // 0なら成功.
 	*jitc.dst = -1; // デバッグ用の特殊opecode.
 	vm.ip  = j32buf;

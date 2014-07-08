@@ -109,6 +109,44 @@ Int32 hh4ReaderGet4Nbit(Hh4Reader *hh4r, int n)
 	return value;
 }
 
+// bitReader関係.
+
+void bitReaderInit(BitReader *br, Hh4Reader *hh4r)
+{
+	br->hh4r = hh4r;
+	br->bitBuf = 0;
+	br->bufLen = 0;
+	return;
+}
+
+int bitReaderGet(BitReader *br)
+{
+	int b;
+	if (br->bufLen <= 0) {
+		br->bitBuf = hh4ReaderGet4bit(br->hh4r);
+		br->bufLen = 4;
+	}
+	br->bufLen--;
+	b = (br->bitBuf >> br->bufLen) & 1;
+	return b;
+}
+
+int bitReaderGetNbitUnsigned(BitReader *br, int n)
+{
+	int i, value = 0;
+	for (i = 0; i < n; i++)
+		value = value << 1 | bitReaderGet(br);
+	return value;
+}
+
+int bitReaderGetNbitSigned(BitReader *br, int n)
+{
+	int value = bitReaderGetNbitUnsigned(br, n);
+	if (n <= 31 && ((value >> (n - 1)) & 1) != 0)
+		value |= -1 << n;
+	return value;
+}
+
 // jitc関係.
 
 void jitcInitDstLogSetPhase(OsecpuJitc *jitc, int phase)
@@ -176,6 +214,7 @@ int jitcAll(OsecpuJitc *jitc)
 {
 	Hh4ReaderPointer src0 = jitc->hh4r.p;
 	Int32 *dst0 = jitc->dst;
+	definesInit(jitc->defines);
 	jitcInitDstLogSetPhase(jitc, 0);
 	for (;;) {
 		// 理想は適当な上限を決めて、休み休みでやるべきかもしれない.
@@ -224,10 +263,10 @@ int execStep(OsecpuVm *vm)
 {
 	const Int32 *ip = vm->ip;
 	vm->errorCode = 0;
-	execStepInteger(vm);	if (ip != vm->ip) goto fin;
-	execStepPointer(vm);	if (ip != vm->ip) goto fin;
-	execStepFloat(vm);		if (ip != vm->ip) goto fin;
-	execStepExtend(vm);		if (ip != vm->ip) goto fin;
+	execStepInteger(vm);	if (ip != vm->ip || vm->errorCode != 0) goto fin;
+	execStepPointer(vm);	if (ip != vm->ip || vm->errorCode != 0) goto fin;
+	execStepFloat(vm);		if (ip != vm->ip || vm->errorCode != 0) goto fin;
+	execStepExtend(vm);		if (ip != vm->ip || vm->errorCode != 0) goto fin;
 	if (*ip == -1) {
 		vm->errorCode = EXEC_ABORT_OPECODE_M1; // デバッグ用.
 		goto fin;

@@ -23,7 +23,7 @@ void jitcStep_checkFxxNotF3F(int *pRC, int fxx)
 
 void jitcStep_checkBitsF(int *pRC, int bit)
 {
-	if (bit != 32 && bit != 64)
+	if (bit != 0 && bit != 32 && bit != 64)
 		jitcSetRetCode(pRC, JITC_BAD_BITS);
 	return;
 }
@@ -44,7 +44,9 @@ int jitcStepFloat(OsecpuJitc *jitc)
 			f = ip[3]; bit = ip[4];
 			jitcStep_checkBitsF(pRC, bit);
 			jitcStep_checkFxx(pRC, f);
-		} else if (ip[1] == 1) {
+			goto fin;
+		}
+		if (ip[1] == 1) {
 			ip[2] = hh4ReaderGet4Nbit(&jitc->hh4r, 32 / 4); // imm
 			ip[3] = hh4ReaderGetUnsigned(&jitc->hh4r); // f
 			ip[4] = hh4ReaderGetUnsigned(&jitc->hh4r); // bit
@@ -52,7 +54,9 @@ int jitcStepFloat(OsecpuJitc *jitc)
 			f = ip[3]; bit = ip[4];
 			jitcStep_checkBitsF(pRC, bit);
 			jitcStep_checkFxx(pRC, f);
-		} else if (ip[1] == 2) {
+			goto fin;
+		}
+		if (ip[1] == 2) {
 			ip[2] = hh4ReaderGet4Nbit(&jitc->hh4r, 32 / 4); // imm-high
 			ip[3] = hh4ReaderGet4Nbit(&jitc->hh4r, 32 / 4); // imm-low
 			ip[4] = hh4ReaderGetUnsigned(&jitc->hh4r); // f
@@ -61,8 +65,9 @@ int jitcStepFloat(OsecpuJitc *jitc)
 			f = ip[4]; bit = ip[5];
 			jitcStep_checkBitsF(pRC, bit);
 			jitcStep_checkFxx(pRC, f);
-		} else
-			jitcSetRetCode(pRC, JITC_BAD_FLIMM_MODE);
+			goto fin;
+		}
+		jitcSetRetCode(pRC, JITC_BAD_FLIMM_MODE);
 		goto fin;
 	}
 	if (opecode == 0x41) {	// FCP
@@ -205,18 +210,12 @@ void execStepFloat(OsecpuVm *vm)
 			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
 			goto fin;
 		}
-		if (opecode == 0x48)
-			i = vm->f[f1] == vm->f[f2];
-		if (opecode == 0x49)
-			i = vm->f[f1] != vm->f[f2];
-		if (opecode == 0x4a)
-			i = vm->f[f1] <  vm->f[f2];
-		if (opecode == 0x4b)
-			i = vm->f[f1] >= vm->f[f2];
-		if (opecode == 0x4c)
-			i = vm->f[f1] <= vm->f[f2];
-		if (opecode == 0x4d)
-			i = vm->f[f1] >  vm->f[f2];
+		if (opecode == 0x48) i = vm->f[f1] == vm->f[f2];
+		if (opecode == 0x49) i = vm->f[f1] != vm->f[f2];
+		if (opecode == 0x4a) i = vm->f[f1] <  vm->f[f2];
+		if (opecode == 0x4b) i = vm->f[f1] >= vm->f[f2];
+		if (opecode == 0x4c) i = vm->f[f1] <= vm->f[f2];
+		if (opecode == 0x4d) i = vm->f[f1] >  vm->f[f2];
 		if (i != 0)
 			i = -1;
 		vm->r[r] = i;
@@ -230,14 +229,10 @@ void execStepFloat(OsecpuVm *vm)
 			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
 			goto fin;
 		}
-		if (opecode == 0x50)
-			vm->f[f0] = vm->f[f1] + vm->f[f2];
-		if (opecode == 0x51)
-			vm->f[f0] = vm->f[f1] - vm->f[f2];
-		if (opecode == 0x52)
-			vm->f[f0] = vm->f[f1] * vm->f[f2];
-		if (opecode == 0x53)
-			vm->f[f0] = vm->f[f1] / vm->f[f2];
+		if (opecode == 0x50) vm->f[f0] = vm->f[f1] + vm->f[f2];
+		if (opecode == 0x51) vm->f[f0] = vm->f[f1] - vm->f[f2];
+		if (opecode == 0x52) vm->f[f0] = vm->f[f1] * vm->f[f2];
+		if (opecode == 0x53) vm->f[f0] = vm->f[f1] / vm->f[f2];
 		vm->bitF[f0] = bit;
 		ip += 5;
 		goto fin;
