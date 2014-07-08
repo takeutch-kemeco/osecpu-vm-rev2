@@ -1,0 +1,7 @@
+#include "osecpu_ask.h"
+
+	Int32s c:R00;
+
+	for (c = 0x20; c != 0x80; c++) {
+		api_putcharRxx(c);
+	}

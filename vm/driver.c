@@ -4,6 +4,8 @@ void drv_openWin(int x, int y, unsigned char *buf, char *winClosed);
 void drv_flshWin(int sx, int sy, int x0, int y0);
 void drv_sleep(int msec);
 
+int OsecpuMain(int argc, const unsigned char **argv);
+
 #if (!defined(DRV_OSNUM))
 	#if (defined(_WIN32))
 		#define DRV_OSNUM			0x0001
@@ -42,7 +44,7 @@ int *keybuf, keybuf_r, keybuf_w, keybuf_c;
 
 void putKeybuf(int i)
 {
-	if ((i & 0x3e3effff) == ('D' | 0x00060000) || (i & 0x3e3effff) == ('F' | 0x00060000)) {
+	if ((i & 0x003fffff) == ('D' | 0x00060000) || (i & 0x003fffff) == ('F' | 0x00060000)) {
 		if (toDebugMonitor != 0)
 			*toDebugMonitor = 1;
 	} else {
@@ -117,9 +119,9 @@ void bl_readyWin(int n);
 
 static HANDLE threadhandle;
 
-int main(int argc, const unsigned char **argv)
+int main(int argc, const char **argv)
 {
-	return OsecpuMain(argc, argv);
+	return OsecpuMain(argc, (const unsigned char **) argv);
 }
 
 void *mallocRWE(int bytes)
@@ -437,7 +439,7 @@ NSApplication* app;
 
 - (void)runApp;
 - (void)createThread : (int)_argc
-args : (const UCHAR **)_argv;
+args : (const char **)_argv;
 - (BOOL)windowShouldClose:(id)sender;
 - (void)openWin : (UCHAR *)buf
 sx : (int) sx
@@ -450,13 +452,13 @@ winClosed : (char *)_winClosed;
 - (void)runApp
 {
   NSAutoreleasePool* pool = [[NSAutoreleasePool alloc] init];
-  OsecpuMain(argc,argv);
+  OsecpuMain(argc, (const UCHAR **) argv);
   [NSApp terminate:self];
 	[pool release];
 }
 
 - (void)createThread : (int)_argc
-  args : (const UCHAR **)_argv
+  args : (const char **)_argv
 {
   argc = _argc;
   argv = _argv;
@@ -497,7 +499,7 @@ winClosed : (char *)_winClosed;
 
 id objc_main;
 
-int main(int argc, const UCHAR **argv)
+int main(int argc, const char **argv)
 {
 	// by hikarupsp, 2014.06.12-
 

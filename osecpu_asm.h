@@ -5,7 +5,7 @@
 #if (defined(NODBGINFO0))
 	#define	DI()						/* none */
 #else
-	#define	DI()						DB(0xfc,0xfd,0xf7,0x88); lbstk6(__FILE__,__LINE__); DB(0xf0)
+	#define	DI()						LIDR(DR0,lbstk7(__FILE__,__LINE__))	// DB(0xfc,0xfd,0xf7,0x88); lbstk6(__FILE__,__LINE__); DB(0xf0)
 #endif
 
 #define	_								DI();

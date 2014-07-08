@@ -171,7 +171,7 @@ void execStepOther(OsecpuVm *vm)
 		vm->p[p].bit = (unsigned char *) osecpuVmStackAlloc(vm, i, 0, i);
 		if (vm->p[p].bit == NULL)
 			jitcSetRetCode(&vm->errorCode, EXEC_STACK_ALLOC_ERROR);
-		for (r = 0; r < i; i++)
+		for (r = 0; r < i; r++)
 			vm->p[p].bit[r] = 0;
 		ip += 6;
 		goto fin;
@@ -183,13 +183,26 @@ void execStepOther(OsecpuVm *vm)
 		getTypSize(typ, &typSize0, &typSize1, &typSign);
 		if (i < 0 || typSize0 < 0 || i > 256 * 1024 * 1024)
 			jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
-		r = (vm->p[p].p - vm->p[p].p0) / typSize1;
-		r = osecpuVmStackFree(vm, i, vm->p[p].bit - r, 0, i);
-		if (r != 0)
-			jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
-		r = osecpuVmStackFree(vm, typSize1 * i, vm->p[p].p0, typ, i);
-		if (r != 0)
-			jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
+		if (p != 0x3f) {
+			if (vm->p[p].p == NULL) {
+				jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
+				goto fin;
+			}
+			r = (vm->p[p].p - vm->p[p].p0) / typSize1;
+			r = osecpuVmStackFree(vm, i, vm->p[p].bit - r, 0, i);
+			if (r != 0)
+				jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
+			r = osecpuVmStackFree(vm, typSize1 * i, vm->p[p].p0, typ, i);
+			if (r != 0)
+				jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
+		} else {
+			r = osecpuVmStackFree(vm, i, NULL, 0, i);
+			if (r != 0)
+				jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
+			r = osecpuVmStackFree(vm, typSize1 * i, NULL, typ, i);
+			if (r != 0)
+				jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
+		}
 		ip += 6;
 		goto fin;
 	}
@@ -210,7 +223,7 @@ void execStepOther(OsecpuVm *vm)
 		vm->p[p].bit = (unsigned char *) malloc(i);
 		if (vm->p[p].bit == NULL)
 			jitcSetRetCode(&vm->errorCode, EXEC_MALLOC_ERROR);
-		for (r = 0; r < i; i++)
+		for (r = 0; r < i; r++)
 			vm->p[p].bit[r] = 0;
 		ip += 6;
 		goto fin;
@@ -415,7 +428,8 @@ int osecpuVmStackFree(OsecpuVm *vm, int totalSize, char *p, int typ, int len)
 	int retcode = 1;
 	TallocHeader *pth = (TallocHeader *) vm->stackTop;
 	totalSize = ((totalSize + 15) & -16) + TALLOCHEADERSIZE16;
-	if (pth->totalSize != totalSize || pth->r1 != -1 || pth->typ != typ || pth->len != len || (p - TALLOCHEADERSIZE16) != vm->stackTop) goto fin;
+	if (pth->totalSize != totalSize || pth->r1 != -1 || pth->typ != typ || pth->len != len) goto fin;
+	if (p != NULL && (p - TALLOCHEADERSIZE16) != vm->stackTop) goto fin;
 	vm->stack0 -= totalSize;
 	vm->stackTop = pth->prevStackTop;
 	retcode = 0;

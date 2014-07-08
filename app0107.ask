@@ -56,8 +56,8 @@ LB0(L_next_group);
 	for (;;) {
 		// âÊñ ÇçÏÇÈ.
 		api_fillRect(MODE_COL3, 0, -1, -1, 0, 0);
-	//	junkApi_drawStringDec6(4, 1, 1,  4 * 8 + 2, 0 * 16 + 2, -1, 'SCORE:\1', score, 8, 2); PAD();
-	//	junkApi_drawStringDec6(4, 1, 1, 22 * 8 + 2, 0 * 16 + 2, -1, 'HIGH:\1',  high,  8, 2); PAD();
+		api_drawStringDec6(MODE_COL3, -1, 1, 1,  4 * 8 + 2, 0 * 16 + 2, 'SCORE:\1', score, 8, 2); PAD();
+		api_drawStringDec6(MODE_COL3, -1, 1, 1, 22 * 8 + 2, 0 * 16 + 2, 'HIGH:\1',  high,  8, 2); PAD();
 		R04 = fx; R05 = 13; PLIMM(P02, L_fighter); R03 = 3; PAD(); R08 = 6; CALL(L_putchar);
 
 		for (i = 0; i != 6; i++) {
@@ -181,7 +181,7 @@ LB0(L_next_group);
 				}
 				j = iy + invline;
 				if (j == 12) {
-				//	junkApi_drawString(4, 1, 1,  15 * 8 + 2, 6 * 16 + 2, 1, 'GAME OVER');
+					api_drawString(MODE_COL3, 1, 1, 1,  15 * 8 + 2, 6 * 16 + 2, 'GAME OVER');
 					do {
 						api_sleep(0, waitUint);
 						api_inkey(i, 0);

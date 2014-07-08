@@ -19,6 +19,8 @@ void apiEnd(OsecpuVm *vm, Int32 retcode);
 #define BUFFER_SIZE		1024 * 1024	// 1M
 #define KEYBUFSIZ		4096
 
+#define INT8STEP		sizeof (char)	// vm-miniやvm-m32では sizeof (Int32) にする.
+
 int OsecpuMain(int argc, const unsigned char **argv)
 {
 	Defines defs;
@@ -252,15 +254,6 @@ static int iColor1[] = {
 	0x0000ff, 0xff00ff, 0x00ffff, 0xffffff
 };
 
-void putOsaskChar(int c)
-{
-	if (0x10 <= c && c <= 0x1f)
-		c = "0123456789ABCDEF"[c & 0x0f];
-	putchar(c);
-	apiWork.lastConsoleChar = c;
-	return;
-}
-
 static unsigned char fontdata[] = {
 	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x00, 0x00, 0x10, 0x10, 0x00, 0x00,
@@ -435,7 +428,102 @@ void apiFillRect(int modeC, int x0, int y0, int x1, int y1, int c)
 	return;
 }
 
-void api0001_putString(OsecpuVm *vm) { }
+int apiSprintf(int buflen, unsigned char *buf, unsigned char *p, unsigned char *p1, Int32 *q, Int32 *q1, OsecpuVm *vm)
+// %sや%fへの対応は将来の課題.
+{
+	int i = 0, base, v, j;
+	unsigned char c, sign;
+	while (p < p1) {
+		if (i >= buflen) {
+err:
+			jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
+			longjmp(apiWork.setjmpErr, 1);
+		}
+		c = *p;
+		p += INT8STEP;
+		if (c == 0x00 || c == 0x7f) continue;
+		if (0x10 <= c && c <= 0x1f)
+			c = "0123456789ABCDEF"[c & 0x0f];
+		if (c >= 0x07) {
+			buf[i++] = c;
+			continue;
+		}
+		if (c == 0x01) {
+			// q[2] = 1:桁可変, 2:スペース化しない, 4:符号なし, 8:プラスの付与.
+			if (q + 4 > q1) goto err;
+			base = q[0];
+			sign = 0;
+			if (base ==  0) base = 16;
+			if (base == -1) base = 10;
+			if (base < 0 || base > 16) goto err;
+			if (i + q[1] > buflen) goto err;	// q[1]:桁の最大サイズ.
+			v = q[3]; // q[3]: value.
+			if ((q[2] & 4) == 0) {
+				// vは符号付き整数.
+				if ((q[2] & 8) != 0 && v > 0) sign = '+';
+				if (v < 0) { sign = '-'; v *= -1; }
+			} else {
+				// vは符号無し整数.
+				if ((q[2] & 8) != 0 && v != 0) sign = '+';
+			}
+			for (j = q[1] - 1; j >= 0; j--) {
+				buf[i + j] = "0123456789ABCDEF"[v % base];
+				v = ((unsigned) v) / base;
+			}
+			j = 0;
+			if ((q[2] & 2) == 0 && v == 0) {
+				for (j = 0; j < q[1] - 1; j++) {
+					if (buf[i + j] != '0') break;
+					buf[i + j] = ' ';
+				}
+			}
+			if (sign != 0) {
+				if (j > 0) j--;
+				buf[i + j] = sign;
+			}
+			if ((q[2] & 1) != 0 && buf[i] == ' ') {
+				for (v = 0; j + v < q[1]; v++)
+					buf[i + v] = buf[i + j + v];
+				i += v;
+			} else
+				i += q[1];
+			q += 4;
+			continue;
+		}
+		goto err;
+	}
+	return i;
+}
+
+void api0001_putString(OsecpuVm *vm)
+{
+	int len = apiGetRxx(vm, 0x31, 32), i;
+	int len32 = apiGetRxx(vm, 0x32, 32);
+	int len33 = apiGetRxx(vm, 0x33, 32);
+	int len34 = apiGetRxx(vm, 0x34, 32);
+	Int32 *q, tmp32;
+	unsigned char *p = vm->p[0x31].p, buf[4096];
+	if (len > 0) {
+		execStep_checkMemAccess(vm, 0x31, 0x03 /* T_UINT8 */, EXEC_CMA_FLAG_READ);
+		if (p + len > vm->p[0x31].p1) {
+err:
+			jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
+			longjmp(apiWork.setjmpErr, 1);
+		}
+	}
+	q = &tmp32;
+	if (len32 > 0) {
+		execStep_checkMemAccess(vm, 0x32, 0x06 /* T_SINT32 */, EXEC_CMA_FLAG_READ);
+		if (vm->p[0x32].p + len32 * sizeof (Int32) > vm->p[0x32].p1) goto err;
+		q = (Int32 *) vm->p[0x32].p;
+	}
+	i = apiSprintf(sizeof buf, buf, p, p + len, q, q + len32, vm);
+	if (i > 0) {
+		fwrite(buf, 1, i, stdout);
+		apiWork.lastConsoleChar = buf[i - 1];
+	}
+	return;
+}
 
 void api0002_drawPoint(OsecpuVm *vm)
 // Point(mode:R31, c:R32, x:R33, y:R34)
@@ -590,7 +678,81 @@ void api0005_oval(OsecpuVm *vm)
 	return;
 }
 
-void api0006_drawString(OsecpuVm *vm) { }
+void api0006_drawString(OsecpuVm *vm)
+{
+	int len = apiGetRxx(vm, 0x37, 32);
+	int len38 = apiGetRxx(vm, 0x38, 32);
+	int len39 = apiGetRxx(vm, 0x39, 32);
+	int len3a = apiGetRxx(vm, 0x3a, 32);
+	Int32 *q, tmp32;
+	unsigned char *p = vm->p[0x31].p, buf[4096];
+	int c = apiLoadColor(vm, 0x32), modeC = apiGetRxx(vm, 0x31, 4) & 0xc;
+	int sx = apiGetRxx(vm, 0x33, 16), sy = apiGetRxx(vm, 0x34, 16);
+	int x = apiGetRxx(vm, 0x35, 16), y = apiGetRxx(vm, 0x36, 16);
+	int x1, y1, i, ddx, ddy, j, ch, dx, dy;
+	if (sy == 0) sy = sx;
+	x1 = x + sx * 8 - 1;
+	y1 = y + sy * 16 - 1;
+	apiCheckPoint(vm, x, y);
+	apiCheckPoint(vm, x1, y1);
+	if (len > 0) {
+		execStep_checkMemAccess(vm, 0x31, 0x03 /* T_UINT8 */, EXEC_CMA_FLAG_READ);
+		if (p + len > vm->p[0x31].p1) {
+err:
+			jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
+			longjmp(apiWork.setjmpErr, 1);
+		}
+	}
+	q = &tmp32;
+	if (len38 > 0) {
+		execStep_checkMemAccess(vm, 0x32, 0x06 /* T_SINT32 */, EXEC_CMA_FLAG_READ);
+		if (vm->p[0x32].p + len38 * sizeof (Int32) > vm->p[0x32].p1) goto err;
+		q = (Int32 *) vm->p[0x32].p;
+	}
+	len = apiSprintf(sizeof buf, buf, p, p + len, q, q + len38, vm);
+	if (len <= 0) goto fin;
+
+	if (modeC == 0x0 && sx == 1 && sy == 1) {
+		// メジャーケースを高速化.
+		for (i = 0; i < len; i++) {
+			ch = buf[i];
+			for (dy = 0; dy < 16; dy++) {
+				j = fontdata[(ch - ' ') * 16 + dy];
+				for (dx = 0; dx < 8; dx++) {
+					if ((j & (0x80 >> dx)) != 0) vram[(x + dx) + (y + dy) * v_xsiz] = c;
+				}
+			}
+			x += 8;
+		}
+		return;
+	}
+	for (i = 0; i < len; i++) {
+		ch = buf[i];
+		for (dy = 0; dy < 16; dy++) {
+			j = fontdata[(ch - ' ') * 16 + dy];
+			for (ddy = 0; ddy < sy; ddy++) {
+				for (dx = 0; dx < 8; dx++) {
+					if ((j & (0x80 >> dx)) != 0) {
+						for (ddx = 0; ddx < sx; ddx++) {
+							if (modeC == 0x0) vram[x + y * v_xsiz] =  c;
+							if (modeC == 0x4) vram[x + y * v_xsiz] |= c;
+							if (modeC == 0x8) vram[x + y * v_xsiz] ^= c;
+							if (modeC == 0xc) vram[x + y * v_xsiz] &= c;
+							x++;
+						}
+					} else
+						x += sx;
+				}
+				x -= sx * 8;
+				y++;
+			}
+		}
+		x += sx * 8;
+		y -= sy * 16;
+	}
+fin:
+	return;
+}
 
 void api0008_exit(OsecpuVm *vm)
 {

@@ -173,8 +173,8 @@ int main(int argc, const UCHAR **argv)
 			 "      osectols tool:binstr str:string\n"
 			 "  aska   ver.0.20\n"//108
 			 "  prepro ver.0.01\n"
-			 "  lbstk  ver.0.03\n"
-			 "  db2bin ver.0.17\n"//113
+			 "  lbstk  ver.0.04\n"//117
+			 "  db2bin ver.0.18\n"//117
 			 "  disasm ver.0.02\n"
 			 "  appack ver.0.20\n"//110
 			 "  maklib ver.0.01\n"
@@ -265,6 +265,8 @@ int isSymbolChar(UCHAR c)
 #define ELEMENT_REG				2
 #define ELEMENT_PREG			3
 #define ELEMENT_CONST			4
+#define ELEMENT_DREG			7
+
 	#define	ELEMENT_INT				1
 #define ELEMENT_PLUS			8
 #define ELEMENT_PLUS1			9
@@ -560,6 +562,12 @@ get8bit:
 					q++;
 					continue;
 				}
+				if (p[-3] == 'D' && p[-2] == 'R' && '0' <= p[-1] && p[-1] <= '9') {
+					q->typ = ELEMENT_DREG;
+					q->iValue = p[-1] - '0';
+					q++;
+					continue;
+				}
 			}
 			static struct {
 				UCHAR typ, s[10];
@@ -603,7 +611,7 @@ const struct Element *shuntingYard(struct Element *q, const struct Element *p)
 	for (;;) {
 		stack[sp].subTyp[1] = 0; // デフォルトでは左結合.
 		if (p->typ == ELEMENT_ERROR) goto err;
-		if (p->typ == ELEMENT_CONST || p->typ == ELEMENT_REG || p->typ == ELEMENT_PREG) {
+		if (p->typ == ELEMENT_CONST || p->typ == ELEMENT_REG || p->typ == ELEMENT_PREG || p->typ == ELEMENT_DREG) {
 			if (isLastValue != 0) goto err;
 			*q++ = *p++;
 			isLastValue = 1;
@@ -901,6 +909,10 @@ err:
 				}
 				if (f[i].typ == ELEMENT_PREG) {
 					stk[sp++] = f[i].iValue + 0x40;
+					continue;
+				}
+				if (f[i].typ == ELEMENT_DREG) {
+					stk[sp++] = f[i].iValue + 0x80;
 					continue;
 				}
 			}
@@ -1758,7 +1770,7 @@ UCHAR *askaPass1(struct Work *w)
 			p = skipSpace(p + 1);
 			if (braseDepth > 0 && brase[braseDepth].typ == ELEMENT_FOR) {
 				if ((brase[braseDepth].flg0 & 2) != 0) { // using remark
-					q = strcpy1(q, "DB(0xfc,0xfe,0x30);");
+					q = strcpy1(q, "REM03();");
 				}
 				if (brase[braseDepth].p1[0] != ')') {
 					askaPass1Sub(w, brase[braseDepth].p1, &q, ident, 0);
@@ -2087,12 +2099,13 @@ identSkip:
 				if (i >= 0) {
 					brase[braseDepth + 1].flg0 |= 2; // using remark
 					for (j = q - qq; j >= 0; j--)
-						qq[j + 46] = qq[j];
+						qq[j + 46*0+18] = qq[j];
 					char tmpStr[52];
-					sprintf(tmpStr, "DB(0xfc,0xfe,0x21,0xf7,0x88);DDBE(0x%08X);", k);
+				//	sprintf(tmpStr, "DB(0xfc,0xfe,0x21,0xf7,0x88);DDBE(0x%08X);", k);
+					sprintf(tmpStr, "REM02(0x%08X);", k);
 					// printf("strlen=%d\n", strlen(tmpStr));
-					memcpy(qq, tmpStr, 46);
-					q += 46;
+				//	memcpy(qq, tmpStr, 46); q += 46;
+					memcpy(qq, tmpStr, 18); q += 18;
 				}
 				isWaitBrase0 = 1;
 				braseDepth++;
@@ -2270,7 +2283,13 @@ int lbstkPass0(struct Work *w, struct LbstkLineInfo *linfo)
 	int i, r = 0;
 	unsigned int line;
 	for (;;) {
-		p = strstr(p, "lbstk6(");
+		for (;;) {
+			p = strstr(p, "lbstk");
+			if (p == NULL) break;
+			if (p[6] == '(' && (p[5] == '6' || p[5] == '7')) break;
+			p++;
+		}
+	//	p = strstr(p, "lbstk6(");
 		if (p == NULL) break;
 		p = strchr(p + 7, '\"');
 		if (p == NULL) goto err1;
@@ -2419,6 +2438,17 @@ UCHAR *lbstkPass1(struct Work *w, struct LbstkLineInfo *linfo)
 				while (*q != '\0') q++;
 				continue;
 			}
+			if (strncmp1(p, "lbstk7(") == 0) {
+				p = strchr(p + 7, '\"') + 1;
+				r = strchr(p, '\"') + 1;
+				for (i = 0; memcmp(linfo[i].file, p, r - p) != 0; i++);
+				p = strchr(r, ',') + 1;
+				line = getConstInt1(&p) + linfo[i].line0;
+				sprintf(q, "0x%08X", line);
+				while (*q != '\0') q++;
+				p = strchr(p, ')') + 1;
+				continue;
+			}
 		}
 		*q++ = *p++;
 	}
@@ -2464,6 +2494,7 @@ const UCHAR *skip2(const UCHAR *p)
 int db2binSub0(struct Work *w, const UCHAR **pp, UCHAR **qq);
 UCHAR *db2binSub1(const UCHAR **pp, UCHAR *q, int width);
 UCHAR *db2binSub2(UCHAR *p0, UCHAR *p1); // ラベル番号の付け直し.
+UCHAR *db2binSub3(UCHAR *p0, UCHAR *p1, UCHAR *p2); // ARRAY_PARAMの展開.
 
 #define DB2BIN_HEADER_LENGTH	3
 
@@ -2485,8 +2516,10 @@ int db2bin(struct Work *w)
 			i = db2binSub0(w, &pi, &q);
 	}
 	putchar(0); // これがないとGCCがおかしくなる.
-	if ((w->flags & 1) == 0 && q != NULL)
+	if ((w->flags & 1) == 0 && q != NULL) {
 		q = db2binSub2(w->obuf + DB2BIN_HEADER_LENGTH, q);
+		q = db2binSub3(w->obuf + DB2BIN_HEADER_LENGTH, q, w->obuf + BUFSIZE);
+	}
 #if 0
 	if (*pi == '\0' && q != NULL /* && (w->obuf[4] & 0xf0) != 0 */) {
 	//	fputs("osecpu binary first byte error.\n", stderr);
@@ -2541,6 +2574,7 @@ int db2binSub0(struct Work *w, const UCHAR **pp, UCHAR **qq)
 			"1typ(",				"DB(0xf7,0x88); DDBE(%0);", // 6bytes.
 			"1r(",					"DB(%0+0x80);", // 1byte.
 			"1p(",					"DB(%0-0x40+0x80);", // 1byte.
+			"1dr(",					"DB((%0&0x3f)+0x80);", // 1byte.
 
 			"0NOP(",				"DB(0xf0);",
 			"2LB(",					"DB(0xf1); imm(%1); imm(%0);",
@@ -2582,8 +2616,17 @@ int db2binSub0(struct Work *w, const UCHAR **pp, UCHAR **qq)
 		//	"3PCMPG(",				"DB(0x2d,%0,%1-0x40,%2-0x40);",
 		//	"2EXT(",				"DB(0x2f,%0); DWBE(%1);",
 
-		//	"1DBGINFO0(",			"DB(0xfe,0x05,0x00); DDBE(%0);",
-			"0DBGINFO1(",			"DB(0xfc,0xfe,0x00);",
+			"2LIDR(",				"DB(0xfc,0xfd); imm(%1); dr(%0);",
+			"0REM00(",				"DB(0xfc,0xfe,0x00);",
+			"0REM01(",				"DB(0xfc,0xfe,0x10);",
+			"1REM02(",				"DB(0xfc,0xfe,0x21); imm(%0);",
+			"0REM03(",				"DB(0xfc,0xfe,0x30);",
+			"0REM04(",				"DB(0xfc,0xfe,0x40);",
+			"0REM05(",				"DB(0xfc,0xfe,0x50);",
+			"0REM06(",				"DB(0xfc,0xfe,0x60);",
+			"0REM07(",				"DB(0xfc,0xfe,0x87,0xf0);",
+			"5REM38(",				"DB(0xfc,0xfe,0xb8,0x85,%0+0x80,%1+0x80); typ(%2); r(%3); p(%4);",
+			"1REM09(",				"DB(0xfc,0xfe,0x89,0xf1); imm(%0);",
 		//	"1DBGINFO(",			"DBGINFO0(%0);",
 			"1JMP(",				"PLIMM(P3F, %0);",
 			"1PJMP(",				"PCP(P3F, %0);",
@@ -2605,6 +2648,7 @@ int db2binSub0(struct Work *w, const UCHAR **pp, UCHAR **qq)
 			"5CMPGEI(",				"LIMM(%1, R3F, %4); CMPGE(%0, %1, %2, %3, R3F);",
 			"5CMPLEI(",				"LIMM(%1, R3F, %4); CMPLE(%0, %1, %2, %3, R3F);",
 			"5CMPGI(",				"LIMM(%1, R3F, %4); CMPG( %0, %1, %2, %3, R3F);",
+			"0DBGINFO1(",			"REM00();",
 			NULL
 		};
 		for (i = 0; table1[i] != NULL; i += 2) {
@@ -2772,11 +2816,32 @@ int db2binSub2Len(const UCHAR *src)
 	if (src[0] == 0xbc && src[1] == 0xf7 && src[2] == 0x88) i = 37; // ENTER
 	if (src[0] == 0xbd && src[1] == 0xf7 && src[2] == 0x88) i = 37; // LEAVE
 	if (src[0] == 0xfc && src[1] == 0xfd && src[2] == 0xf7 && src[3] == 0x88 && src[8] == 0xf0) i = 9; // LIDR
-	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x00) i = 3; // remark-0
-	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x10) i = 3; // remark-1
-	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x21 && src[3] == 0xf7 && src[4] == 0x88) i = 9; // remark-2
-	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x30) i = 3; // remark-3
-	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x50) i = 3; // remark-5
+	if (src[0] == 0xfc && src[1] == 0xfd && src[2] == 0xf7 && src[3] == 0x88 && src[8] == 0x80) i = 9; // LIDR
+	if (src[0] == 0xfc && src[1] == 0xfe) {
+		if (src[2] == 0x00) i = 3; // remark-0
+		if (src[2] == 0x10) i = 3; // remark-1
+		if (src[2] == 0x21 && src[3] == 0xf7 && src[4] == 0x88) i = 9; // remark-2
+		if (src[2] == 0x30) i = 3; // remark-3
+		if (src[2] == 0x50) i = 3; // remark-5
+		if (src[2] == 0x88 && src[3] == 0x85) i = 14; // remark-8
+		if (src[2] == 0xb8 && src[3] == 0x85) {	// remark-38
+			if (src[5] == 0x80) {	// src-mode:0	DB%(s,0x00);
+				for (i = 14; src[i] != 0x00; i++);
+				i++;
+			}
+			if (src[5] == 0x81) {	// src-mode:1	DDBE(...,0);
+				for (i = 14; (src[i] | src[i + 1] | src[i + 2] | src[i + 3]) != 0; i += 4);
+				i += 4;
+			}
+			if (src[5] == 0x82) {	// src-mode:2	R31=len; P31=s;
+				i = 14;
+			}
+			if (src[5] == 0x83) {	// src-mode:3	DDBE(len,...);
+				i = 18 + (src[14] << 24 | src[15] << 16 | src[16] << 8 | src[17]) * 4;
+			}
+		}
+		if (src[2] == 0x89 && src[3] == 0xf1 && src[4] == 0xf7 && src[5] == 0x88) i = 10; // remark-9
+	}
 #if 0
 	if (*src == 0x00) i = 1;
 	if (0x01 <= *src && *src < 0x04) i = 6;
@@ -2878,6 +2943,281 @@ UCHAR *db2binSub2(UCHAR *p0, UCHAR *p1)
 		p += db2binSub2Len(p);
 	}
 	return p1;
+}
+
+void db2binSub3_check(UCHAR *q, UCHAR *q1)
+{
+	if (q > q1) {
+		fprintf(stderr, "db2binSub3_check: buffer over.\n");
+		exit(1);
+	}
+	return;
+}
+
+UCHAR *db2binSub3_put32(UCHAR *q, int i)
+{
+	q[ 0] = 0xf7;
+	q[ 1] = 0x88;
+	q[ 2] = (i >> 24) & 0xff;
+	q[ 3] = (i >> 16) & 0xff;
+	q[ 4] = (i >>  8) & 0xff;
+	q[ 5] =  i        & 0xff;
+	return q + 6;
+}
+
+UCHAR *db2binSub3_LIMM(UCHAR *q, UCHAR *q1, int bit, int r, int imm)
+{
+	q[ 0] = 0xf2;
+	db2binSub3_put32(q +  1, imm);
+	q[ 7] = (r & 0x3f) | 0x80;
+	db2binSub3_put32(q +  8, bit);
+	q += 14;
+	db2binSub3_check(q, q1);
+	return q;
+}
+
+UCHAR *db2binSub3(UCHAR *p0, UCHAR *p1, UCHAR *p2)
+// ARRAY_PARAMの展開.
+{
+	int i, j = p1 - p0, k, sp;
+	UCHAR *p = p2 - j;
+	int tfreeBufTyp[4], tfreeBufLen[4];
+	UCHAR tfreeBufR[4], tfreeBufP[4];
+	for (i = 0; i < j; i++)
+		p[i] = p0[i];
+	for (i = 0; i < 4; i++)
+		tfreeBufTyp[i] = 0;
+	sp = -1;
+	while (p < p2) {
+		if (p[0] == 0xfc && p[1] == 0xfe && p[2] == 0xb8 && p[3] == 0x85) {
+			UCHAR srcMode = p[5];
+			if (srcMode == 0x80) {	// src-mode:0	DB(s, 0);
+				sp++;
+				tfreeBufTyp[sp] = p[8] << 24 | p[9] << 16 | p[10] << 8 | p[11];
+				tfreeBufR[sp] = p[12];
+				tfreeBufP[sp] = p[13];
+				p0[0] = 0xfc;
+				p0[1] = 0xfe;
+				p0[2] = 0x88;
+				p0[3] = 0x85;
+				p0[4] = p[4];
+				p0[5] = 0x80;
+				db2binSub3_put32(p0 + 6, tfreeBufTyp[sp]);
+				p0[12] = tfreeBufR[sp];
+				p0[13] = tfreeBufP[sp];
+				p += 14;
+				p0 += 14;
+				for (i = 0; p[i] != 0; i++);
+				tfreeBufLen[sp] = i;	// len;
+				p0 = db2binSub3_LIMM(p0, p, 32, tfreeBufR[sp], tfreeBufLen[sp]);
+				p0 = db2binSub3_LIMM(p0, p, 32, 0x3b, tfreeBufTyp[sp]);
+				p0[0] = 0xb0;	// talloc(32,32,P3B,R3B,tfreeBufR[sp]);
+				p0[1] = 0xbb;
+				db2binSub3_put32(p0 + 2, 32);
+				p0[8] = tfreeBufR[sp];
+				db2binSub3_put32(p0 + 9, 32);
+				p0[15] = 0xbb;
+				p0 += 16;
+				p0[0] = 0x9e;	// PCP(tfreeBufP[sp],P3B);
+				p0[1] = 0xbb;
+				p0[2] = tfreeBufP[sp];
+				p0 += 3;
+				db2binSub3_check(p0, p);
+				for (i = 0; i < tfreeBufLen[sp]; i++) {
+					j = p[0];
+					p++;
+					k = 0xbb;
+					p0 = db2binSub3_LIMM(p0, p, 32, k, j);
+					p0[0] = 0x89;	// SMEM(32, m, tfreeBufTyp[sp], P3B, 0);
+					p0[1] = k;
+					db2binSub3_put32(p0 + 2, 32);
+					p0[8] = 0xbb;
+					db2binSub3_put32(p0 + 9, tfreeBufTyp[sp]);
+					db2binSub3_put32(p0 + 15, 0);
+					p0 += 21;
+					p0 = db2binSub3_LIMM(p0, p, 32, 0x3f, 1);
+					p0[0] = 0x8e;
+					p0[1] = 0xbb;
+					db2binSub3_put32(p0 + 2, tfreeBufTyp[sp]);
+					p0[8] = 0xbf;
+					db2binSub3_put32(p0 + 9, 32);
+					p0[15] = 0xbb;
+					p0 += 16;
+					db2binSub3_check(p0, p);
+				}
+				p++;
+				srcMode = 0xff;
+			}
+			if (srcMode == 0x81) {	// src-mode:1	DDBE(...,0);
+				sp++;
+				tfreeBufTyp[sp] = p[8] << 24 | p[9] << 16 | p[10] << 8 | p[11];
+				tfreeBufR[sp] = p[12];
+				tfreeBufP[sp] = p[13];
+				p0[0] = 0xfc;
+				p0[1] = 0xfe;
+				p0[2] = 0x88;
+				p0[3] = 0x85;
+				p0[4] = p[4];
+				p0[5] = 0x81;
+				db2binSub3_put32(p0 + 6, tfreeBufTyp[sp]);
+				p0[12] = tfreeBufR[sp];
+				p0[13] = tfreeBufP[sp];
+				p += 14;
+				p0 += 14;
+				for (i = 0; (p[i] | p[i + 1] | p[i + 2] | p[i + 3]) != 0; i += 4);
+				tfreeBufLen[sp] = i / 4;	// len;
+				p0 = db2binSub3_LIMM(p0, p, 32, tfreeBufR[sp], tfreeBufLen[sp]);
+				p0 = db2binSub3_LIMM(p0, p, 32, 0x3b, tfreeBufTyp[sp]);
+				p0[0] = 0xb0;	// talloc(32,32,P3B,R3B,tfreeBufR[sp]);
+				p0[1] = 0xbb;
+				db2binSub3_put32(p0 + 2, 32);
+				p0[8] = tfreeBufR[sp];
+				db2binSub3_put32(p0 + 9, 32);
+				p0[15] = 0xbb;
+				p0 += 16;
+				p0[0] = 0x9e;	// PCP(tfreeBufP[sp],P3B);
+				p0[1] = 0xbb;
+				p0[2] = tfreeBufP[sp];
+				p0 += 3;
+				db2binSub3_check(p0, p);
+				for (i = 0; i < tfreeBufLen[sp]; i++) {
+					j = p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3];
+					p += 4;
+					k = 0xbb;
+					if (((int) 0x80520000) <= j && j <= ((int) 0x8052003f)) {
+						k = (j & 0x3f) | 0x80;
+					} else {
+						p0 = db2binSub3_LIMM(p0, p, 32, k, j);
+					}
+					p0[0] = 0x89;	// SMEM(32, m, tfreeBufTyp[sp], P3B, 0);
+					p0[1] = k;
+					db2binSub3_put32(p0 + 2, 32);
+					p0[8] = 0xbb;
+					db2binSub3_put32(p0 + 9, tfreeBufTyp[sp]);
+					db2binSub3_put32(p0 + 15, 0);
+					p0 += 21;
+					p0 = db2binSub3_LIMM(p0, p, 32, 0x3f, 1);
+					p0[0] = 0x8e;
+					p0[1] = 0xbb;
+					db2binSub3_put32(p0 + 2, tfreeBufTyp[sp]);
+					p0[8] = 0xbf;
+					db2binSub3_put32(p0 + 9, 32);
+					p0[15] = 0xbb;
+					p0 += 16;
+					db2binSub3_check(p0, p);
+				}
+				p += 4;
+				srcMode = 0xff;
+			}
+			if (srcMode == 0x82) {	// src-mode:2	R31=len; P31=s;
+				p0[0] = 0xfc;
+				p0[1] = 0xfe;
+				p0[2] = 0x88;
+				p0[3] = 0x85;
+				p0[4] = p[4];
+				p0[5] = 0x82;
+				p0[6] = 0xf7;
+				p0[7] = 0x88;
+				p0[8] = p[8];
+				p0[9] = p[9];
+				p0[10] = p[10];
+				p0[11] = p[11];
+				p0[12] = p[12];
+				p0[13] = p[13];
+				p0 += 14;
+				p += 14;
+				srcMode = 0xff;
+			}
+			if (srcMode == 0x83) {	// src-mode:3	DDBE(len,...);
+				sp++;
+				tfreeBufTyp[sp] = p[8] << 24 | p[9] << 16 | p[10] << 8 | p[11];
+				tfreeBufR[sp] = p[12];
+				tfreeBufP[sp] = p[13];
+				p0[0] = 0xfc;
+				p0[1] = 0xfe;
+				p0[2] = 0x88;
+				p0[3] = 0x85;
+				p0[4] = p[4];
+				p0[5] = 0x83;
+				db2binSub3_put32(p0 + 6, tfreeBufTyp[sp]);
+				p0[12] = tfreeBufR[sp];
+				p0[13] = tfreeBufP[sp];
+				p += 14;
+				p0 += 14;
+				tfreeBufLen[sp] = p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3];
+				p += 4;
+				p0 = db2binSub3_LIMM(p0, p, 32, tfreeBufR[sp], tfreeBufLen[sp]);
+				p0 = db2binSub3_LIMM(p0, p, 32, 0x3b, tfreeBufTyp[sp]);
+				p0[0] = 0xb0;	// talloc(32,32,P3B,R3B,tfreeBufR[sp]);
+				p0[1] = 0xbb;
+				db2binSub3_put32(p0 + 2, 32);
+				p0[8] = tfreeBufR[sp];
+				db2binSub3_put32(p0 + 9, 32);
+				p0[15] = 0xbb;
+				p0 += 16;
+				p0[0] = 0x9e;	// PCP(tfreeBufP[sp],P3B);
+				p0[1] = 0xbb;
+				p0[2] = tfreeBufP[sp];
+				p0 += 3;
+				db2binSub3_check(p0, p);
+				for (i = 0; i < tfreeBufLen[sp]; i++) {
+					j = p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3];
+					p += 4;
+					k = 0xbb;
+					if (((int) 0x80520000) <= j && j <= ((int) 0x8052003f)) {
+						k = (j & 0x3f) | 0x80;
+					} else {
+						p0 = db2binSub3_LIMM(p0, p, 32, k, j);
+					}
+					p0[0] = 0x89;	// SMEM(32, m, tfreeBufTyp[sp], P3B, 0);
+					p0[1] = k;
+					db2binSub3_put32(p0 + 2, 32);
+					p0[8] = 0xbb;
+					db2binSub3_put32(p0 + 9, tfreeBufTyp[sp]);
+					db2binSub3_put32(p0 + 15, 0);
+					p0 += 21;
+					p0 = db2binSub3_LIMM(p0, p, 32, 0x3f, 1);
+					p0[0] = 0x8e;
+					p0[1] = 0xbb;
+					db2binSub3_put32(p0 + 2, tfreeBufTyp[sp]);
+					p0[8] = 0xbf;
+					db2binSub3_put32(p0 + 9, 32);
+					p0[15] = 0xbb;
+					p0 += 16;
+					db2binSub3_check(p0, p);
+				}
+				srcMode = 0xff;
+			}
+			if (srcMode != 0xff) {
+				fprintf(stderr, "db2binSub3: unknown srcMode=0x%02x\n", srcMode);
+				exit(1);
+			}
+		} else if (p[0] == 0x9e && p[1] == 0xaf && p[2] == 0xbf && p[3] == 0xf1 && p[4] == 0xf7 && p[10] == 0xf7) {
+			for (i = 0; i < 16; i++)
+				p0[i] = p[i];
+			p0 += 16;
+			p += 16;
+			while (sp >= 0) {
+				p0 = db2binSub3_LIMM(p0, p, 32, 0x3a, tfreeBufLen[sp]);
+				p0 = db2binSub3_LIMM(p0, p, 32, 0x3b, tfreeBufTyp[sp]);
+				p0[0] = 0xb1;	// tfree(32,32,P3F,R3B,R3A);
+				p0[1] = 0xbf;	// チェックをしない.
+				p0[2] = 0xbb;
+				db2binSub3_put32(p0 + 3, 32);
+				p0[9] = 0xba;
+				db2binSub3_put32(p0 + 10, 32);
+				p0 += 16;
+				sp--;
+			}
+		} else {
+			j = db2binSub2Len(p);
+			for (i = 0; i < j; i++)
+				p0[i] = p[i];
+			p0 += i;
+			p += i;
+		}
+	}
+	return p0;
 }
 
 int disasm0(struct Work *w)

@@ -130,3 +130,7 @@
   OSECPU-VMにおいて、tallocやmallocは失敗しない。失敗したらアプリは止まる。
   もしメモリがなかった場合にNULLを返してほしいのなら、APIを利用する。
 
+2014.07.03木:
+  cfe-8-5-(fcode-mode)-(src-mode)-(typ)-(Rxx)-(Pxx) : ARRAY_PARAM
+  cfe-9-1-(fcode-mode) : REM9
+
