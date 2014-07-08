@@ -105,6 +105,8 @@ Int32 *hh4Decode(OsecpuJitc *jitc)
 		jitc->hh4dst = dst;
 		dst = hh4DecodeInteger(jitc, opecode);
 		if (dst != jitc->hh4dst) continue; // ‰½‚©ˆ—‚Å‚«‚½‚æ‚¤‚È‚Ì‚ÅŽŸ‚Ö.
+		dst = hh4DecodePointer(jitc, opecode);
+		if (dst != jitc->hh4dst) continue;
 		dst = hh4DecodeFloat(jitc, opecode);
 		if (dst != jitc->hh4dst) continue;
 		dst = hh4DecodeExtend(jitc, opecode);

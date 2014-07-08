@@ -2,12 +2,22 @@
 
 // initŠÖŒW.
 
-void OsecpuInit()
+void osecpuInit()
 {
 	instrLengthSimpleInit();
 
-	OsecpuInitInteger();
-	OsecpuInitFloat();
+	osecpuInitInteger();
+	osecpuInitPointer();
+	osecpuInitFloat();
+	osecpuInitExtend();
+	return;
+}
+
+void definesInit(Defines *def)
+{
+	int i;
+	for (i = 0; i < DEFINES_MAXLABELS; i++)
+		def->label[i].typ = 0; // –¢Žg—p.
 	return;
 }
 
@@ -56,8 +66,8 @@ int instrLength(const Int32 *src, const Int32 *src1)
 	if (retcode > 0) goto fin;
 	retcode = instrLengthInteger(src, src1);
 	if (retcode > 0) goto fin;
-//	retcode = instrLengthPointer(src, src1);
-//	if (retcode > 0) goto fin;
+	retcode = instrLengthPointer(src, src1);
+	if (retcode > 0) goto fin;
 	retcode = instrLengthFloat(src, src1);
 	if (retcode > 0) goto fin;
 	retcode = instrLengthExtend(src, src1);
@@ -70,6 +80,16 @@ fin:
 }
 
 // jitcŠÖŒW.
+
+void jitcInitDstLogSetPhase(OsecpuJitc *jitc, int phase)
+{
+	int i;
+	for (i = 0; i < JITC_DSTLOG_SIZE; i++)
+		jitc->dstLog[i] = NULL;
+	jitc->dstLogIndex = 0;
+	jitc->phase = phase;
+	return;
+}
 
 void jitcSetRetCode(int *pRC, int value)
 {
@@ -91,21 +111,27 @@ int jitcStep(OsecpuJitc *jitc)
 	}
 	retcode = jitcStepInteger(jitc);
 	if (retcode >= 0) goto fin;
+	retcode = jitcStepPointer(jitc);
+	if (retcode >= 0) goto fin;
 	retcode = jitcStepFloat(jitc);
 	if (retcode >= 0) goto fin;
 	retcode = jitcStepExtend(jitc);
 	if (retcode >= 0) goto fin;
 	retcode = JITC_BAD_OPECODE;
 fin:
-	if (retcode == 0) {
-		if (jitc->dst + length > jitc->dst1)
-			retcode = JITC_DST_OVERRUN;
-		for (i = 0; i < length; i++) {
-			jitc->dst[i] = ip[i];
-		}
-		jitc->src += length;
-		jitc->dst += length;
+	if (retcode != 0)
+		goto fin1;
+	if (jitc->dst + length > jitc->dst1) {
+		retcode = JITC_DST_OVERRUN;
+		goto fin1;
 	}
+	for (i = 0; i < length; i++)
+		jitc->dst[i] = ip[i];
+	i = jitc->dstLogIndex;
+	jitc->dstLog[i] = jitc->dst; // ƒGƒ‰[‚Ì‚È‚©‚Á‚½–½—ß‚Í‹L˜^‚·‚é.
+	jitc->dstLogIndex = (i + 1) % JITC_DSTLOG_SIZE;
+	jitc->src += length;
+	jitc->dst += length;
 fin1:
 	jitc->errorCode = retcode;
 	return retcode;
@@ -113,11 +139,25 @@ fin1:
 
 int jitcAll(OsecpuJitc *jitc)
 {
+	const Int32 *src0 = jitc->src;
+	Int32 *dst0 = jitc->dst;
+	jitcInitDstLogSetPhase(jitc, 0);
 	for (;;) {
 		// —‘z‚Í“K“–‚ÈãŒÀ‚ðŒˆ‚ß‚ÄA‹x‚Ý‹x‚Ý‚Å‚â‚é‚×‚«‚©‚à‚µ‚ê‚È‚¢.
 		jitcStep(jitc);
 		if (jitc->errorCode != 0) break;
 	}
+	if (jitc->errorCode != JITC_SRC_OVERRUN)
+		goto fin;
+	jitc->src = src0;
+	jitc->dst = dst0;
+	jitcInitDstLogSetPhase(jitc, 1);
+	for (;;) {
+		// —‘z‚Í“K“–‚ÈãŒÀ‚ðŒˆ‚ß‚ÄA‹x‚Ý‹x‚Ý‚Å‚â‚é‚×‚«‚©‚à‚µ‚ê‚È‚¢.
+		jitcStep(jitc);
+		if (jitc->errorCode != 0) break;
+	}
+fin:
 	return jitc->errorCode;
 }
 
@@ -149,6 +189,8 @@ int execStep(OsecpuVm *vm)
 	const Int32 *ip = vm->ip;
 	vm->errorCode = 0;
 	execStepInteger(vm);
+	if (ip != vm->ip) goto fin;
+	execStepPointer(vm);
 	if (ip != vm->ip) goto fin;
 	execStepFloat(vm);
 	if (ip != vm->ip) goto fin;

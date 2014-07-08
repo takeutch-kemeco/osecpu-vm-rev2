@@ -2,7 +2,7 @@
 
 // •‚“®¬”“_–½—ß: 40-43, 48-4D, 50-53
 
-void OsecpuInitFloat()
+void osecpuInitFloat()
 {
 	static int table[] = {
 		0, 5, 5, 5, 0, 0, 0, 0, 6, 6, 6, 6, 6, 6, 0, 0, // 4x
@@ -160,7 +160,8 @@ int jitcStepFloat(OsecpuJitc *jitc)
 
 	goto fin1;
 fin:
-	retcode = 0;
+	if (retcode == -1)
+		retcode = 0;
 fin1:
 	return retcode;
 }
@@ -270,13 +271,13 @@ void execStepFloat(OsecpuVm *vm)
 			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
 			goto fin;
 		}
-		if (opecode == 0x10)
+		if (opecode == 0x50)
 			vm->f[f0] = vm->f[f1] + vm->f[f2];
-		if (opecode == 0x11)
+		if (opecode == 0x51)
 			vm->f[f0] = vm->f[f1] - vm->f[f2];
-		if (opecode == 0x12)
+		if (opecode == 0x52)
 			vm->f[f0] = vm->f[f1] * vm->f[f2];
-		if (opecode == 0x13)
+		if (opecode == 0x53)
 			vm->f[f0] = vm->f[f1] / vm->f[f2];
 		vm->bitF[f0] = bit;
 		ip += 5;

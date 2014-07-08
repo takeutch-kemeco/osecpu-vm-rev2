@@ -2,7 +2,7 @@
 
 // êÆêîñΩóﬂ: 02, 10-16, 18-1B, 20-27, FD
 
-void OsecpuInitInteger()
+void osecpuInitInteger()
 {
 	static int table[] = {
 		1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x
@@ -118,7 +118,8 @@ int jitcStepInteger(OsecpuJitc *jitc)
 	}
 	goto fin1;
 fin:
-	retcode = 0;
+	if (retcode == -1)
+		retcode = 0;
 fin1:
 	return retcode;
 }

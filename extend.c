@@ -2,7 +2,7 @@
 
 // C0-DF‚É–½—ß‚ðŠg’£‚·‚é‚½‚ß‚Ì‚à‚Ì.
 
-void OsecpuInitExtend()
+void osecpuInitExtend()
 {
 	return;
 }
