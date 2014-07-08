@@ -1,0 +1,14 @@
+#include "osecpu_ask.h"
+
+    Int32s xsiz:R01, ysiz:R02, x0:R03, y0:R04, col:R00, i:R05;
+
+    for (i = 0; i != 128; i++) {
+        col = i * 0x020201;
+		xsiz = 144 - i;
+		xsiz *= 2;
+	//	ysiz = xsiz;
+        y0 = (240 - 144) + i;
+        x0 = (320 - 144) + i;
+        api_fillOval(MODE_COL24, col, xsiz, ysiz, x0, y0);
+    }
+

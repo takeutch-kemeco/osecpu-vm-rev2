@@ -4,7 +4,7 @@
 // OsecpuMain()はこのapi.cにあります！
 
 typedef struct _ApiWork {
-	char winClosed, autoSleep;
+	char winClosed, autoSleep /* , col3bgr */;
 //	jmp_buf setjmpEnv;
 	jmp_buf setjmpErr;
 	unsigned char lastConsoleChar;
@@ -25,7 +25,7 @@ int OsecpuMain(int argc, const unsigned char **argv)
 	OsecpuVm vm;
 	unsigned char *byteBuf0 = malloc(BUFFER_SIZE);
 	Int32 *j32buf = malloc(BUFFER_SIZE * sizeof (Int32));
-	int fileSize, rc;
+	int fileSize, rc, i;
 	FILE *fp;
 	jitc.defines = &defs;
 	vm.defines = &defs;
@@ -44,26 +44,53 @@ int OsecpuMain(int argc, const unsigned char **argv)
 		fputs("app-file too large.\n", stderr);
 		exit(1);
 	}
-	if (byteBuf0[0] != 0x05 || byteBuf0[1] != 0xec || byteBuf0[2] != 0x02 || byteBuf0[3] != 0x00) {
+	if (byteBuf0[0] != 0x05 || byteBuf0[1] != 0xe2 || fileSize < 3) {
 		fputs("app-file signature mismatch.\n", stderr);
 		exit(1);
 	}
-	hh4ReaderInit(&jitc.hh4r, byteBuf0 + 4, 0, byteBuf0 + fileSize, 0);
+	for (;;) {
+		if (fileSize < 0) break;
+		if (byteBuf0[2] == 0x02) {
+			fileSize = decode_tek5 (byteBuf0 + 3, byteBuf0 + fileSize, byteBuf0 + 2, byteBuf0 + BUFFER_SIZE);
+			if (fileSize > 0) fileSize += 2;
+			continue;
+		}
+		if (byteBuf0[2] == 0x01) {
+			fileSize = decode_upx  (byteBuf0 + 3, byteBuf0 + fileSize, byteBuf0 + 2, byteBuf0 + BUFFER_SIZE);
+			if (fileSize > 0) fileSize += 2;
+			continue;
+		}
+		if (byteBuf0[2] >= 0x10) {
+			fileSize = decode_fcode(byteBuf0 + 2, byteBuf0 + fileSize, byteBuf0 + 2, byteBuf0 + BUFFER_SIZE);
+			if (fileSize > 0) fileSize += 2;
+			continue;
+		}
+		break;
+	}
+	if (fileSize <= 0 || byteBuf0[2] != 0x00) {
+		fputs("app-file decode error.\n", stderr);
+		exit(1);
+	}
+	hh4ReaderInit(&jitc.hh4r, byteBuf0 + 3, 0, byteBuf0 + fileSize, 0);
 	jitc.dst  = j32buf;
 	jitc.dst1 = j32buf + BUFFER_SIZE;
 	rc = jitcAll(&jitc);
 	if (rc != 0) {
-		fprintf(stderr, "jitcAll()=%d\n", rc);
+		fprintf(stderr, "jitcAll()=%d, DR0=%d\n", rc, jitc.dr[0]);
 		exit(1);
 	}
-	*jitc.dst = -1; // 終端のための特殊opecode.
+//	*jitc.dst = -1; // 終端のための特殊opecode.
 	vm.ip  = j32buf;
 	vm.ip1 = jitc.dst;
 
 	apiInit(&vm);
+//	for (i = 1; i < argc; i++) {
+//		if (strcmp(argv[i], "-col3bgr") == 0)
+//			apiWork.col3bgr = 1;
+//	}
 	rc = execAll(&vm);
-	if (rc != 65535) {
-		fprintf(stderr, "execAll()=%d\n", rc); // 65535なら成功(EXEC_ABORT_OPECODE_M1).
+	if (rc != EXEC_SRC_OVERRUN) {
+		fprintf(stderr, "execAll()=%d, DR0=%d\n", rc, vm.dr[0]); // EXEC_SRC_OVERRUNなら成功.
 		exit(1);
 	}
 	apiEnd(&vm);
@@ -79,15 +106,25 @@ extern int *vram, v_xsiz, v_ysiz;
 
 void apiInit(OsecpuVm *vm)
 {
-	int i;
+	int i, j;
 	for (i = 0; i <= 0x3f; i++) {
 		vm->r[i] = 0; vm->bit[i] = 32; // Rxx: すべて32ビットの0.
 		vm->p[i].typ = PTR_TYP_INVALID; // Pxx: すべて不正.
+	}
+	j = 1;
+	for (i = 0; i < DEFINES_MAXLABELS; i++) {
+		if (j > 4) break;
+		if (vm->defines->label[i].typ == 0) continue; // 未使用.
+		if (vm->defines->label[i].opt == 0) continue;
+		if (vm->defines->label[i].typ == PTR_TYP_CODE) continue;
+		execStep_plimm(vm, j, i);
+		j++;
 	}
 	vm->p[0x28].typ = PTR_TYP_NATIVECODE;
 	vm->p[0x28].p = (void *) &apiEntry;
 	apiWork.winClosed = 0;
 	apiWork.autoSleep = 0;
+//	apiWork.col3bgr = 0;
 	apiWork.lastConsoleChar = '\n';
 //	if (setjmp(apiWork.setjmpEnv) != 0)
 //		apiEnd(vm);
@@ -164,8 +201,8 @@ Int32 apiGetRxx(OsecpuVm *vm, int r, int bit)
 }
 
 static int iColor1[] = {
-	0x000000, 0x0000ff, 0x00ff00, 0x00ffff,
-	0xff0000, 0xff00ff, 0xffff00, 0xffffff
+	0x000000, 0xff0000, 0x00ff00, 0xffff00,
+	0x0000ff, 0xff00ff, 0x00ffff, 0xffffff
 };
 
 void putOsaskChar(int c)
@@ -281,8 +318,11 @@ int apiLoadColor(OsecpuVm *vm, int rxx)
 	int c = apiGetRxx(vm, rxx, 16), m, rr, gg, bb;
 	m = apiGetRxx(vm, 0x31, 2) & 3;
 	if (m == 0x00) {
+	//	static col3_bgr_table[8] = { 0, 4, 2, 6, 1, 5, 3, 7 };
 		if (c < -1 || c > 7)
 			jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
+	//	if (apiWork.col3bgr != 0)
+	//		c = col3_bgr_table[c & 7];
 		c = iColor1[c & 0x07];
 	}
 	if (m == 0x01) {
@@ -369,8 +409,14 @@ void api0003_drawLine(OsecpuVm *vm)
 	int x0 = apiGetRxx(vm, 0x33, 16), y0 = apiGetRxx(vm, 0x34, 16);
 	int x1 = apiGetRxx(vm, 0x35, 16), y1 = apiGetRxx(vm, 0x36, 16);
 	int dx, dy, x, y, len, i;
-	apiCheckPoint(vm, x0, y0);
-	apiCheckPoint(vm, x1, y1);
+	if (1) { // クリッピングOFFの場合.
+		if (x0 == -1) x0 = v_xsiz - 1;
+		if (y0 == -1) y0 = v_ysiz - 1;
+		if (x1 == -1) x1 = v_xsiz - 1;
+		if (y1 == -1) y1 = v_ysiz - 1;
+		apiCheckPoint(vm, x0, y0);
+		apiCheckPoint(vm, x1, y1);
+	}
 	dx = x1 - x0;
 	dy = y1 - y0;
 	x = x0 << 10;
@@ -413,6 +459,8 @@ void api0004_rect(OsecpuVm *vm)
 	int xsiz = apiGetRxx(vm, 0x33, 16), ysiz = apiGetRxx(vm, 0x34, 16), x0, y0, x1, y1;
 	if (xsiz == -1) { xsiz = v_xsiz; x0 = 0; } else { x0 = apiGetRxx(vm, 0x35, 16); }
 	if (ysiz == -1) { ysiz = v_ysiz; y0 = 0; } else { y0 = apiGetRxx(vm, 0x36, 16); }
+	if (ysiz == 0) ysiz = xsiz;
+//printf("c=%06X %d %d %d %d", c, xsiz, ysiz, x0, y0);
 	x1 = x0 + xsiz - 1;
 	y1 = y0 + ysiz - 1;
 	apiCheckPoint(vm, x0, y0);
@@ -438,6 +486,7 @@ void api0005_oval(OsecpuVm *vm)
 	int x, y, modeC;
 	if (xsiz == -1) { xsiz = v_xsiz; x0 = 0; } else { x0 = apiGetRxx(vm, 0x35, 16); }
 	if (ysiz == -1) { ysiz = v_ysiz; y0 = 0; } else { y0 = apiGetRxx(vm, 0x36, 16); }
+	if (ysiz == 0) ysiz = xsiz;
 	x1 = x0 + xsiz - 1;
 	y1 = y0 + ysiz - 1;
 	apiCheckPoint(vm, x0, y0);
@@ -446,7 +495,7 @@ void api0005_oval(OsecpuVm *vm)
 	dcy = 0.5 * (ysiz - 1);
 	dcxy = (dcx + 0.5) * (dcy + 0.5) - 0.1;
 	dcxy *= dcxy;
-	if (mode == 0) {
+	if ((mode & ~3) == 0) {
 		for (y = 0; y < ysiz; y++) {
 			dty = (y - dcy) * dcx;
 			for (x = 0; x < xsiz; x++) {
@@ -505,7 +554,8 @@ void api0010_openWin(OsecpuVm *vm)
 		jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
 	v_xsiz = apiGetRxx(vm, 0x31, 16);
 	v_ysiz = apiGetRxx(vm, 0x32, 16);
-	if (v_xsiz <= 0 || 4096 < v_xsiz || v_ysiz <= 0 || 4096 < v_ysiz)
+	if (v_ysiz == 0) v_ysiz = v_xsiz;
+	if (v_xsiz <= 0 || 4096 < v_xsiz || v_ysiz < 0 || 4096 < v_ysiz)
 		jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
 	if (vm->errorCode > 0) goto fin;
 	vram = malloc(v_xsiz * v_ysiz * 4);

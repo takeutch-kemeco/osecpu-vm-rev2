@@ -49,7 +49,7 @@
 #define	TOELSE							lbstk1(1,1)
 #define	TOENDIF							lbstk1(1,2)
 
-#define	DAT_SA0(label, typ32, length)	LB(1, label); DB(0x34); DDBE(typ32, length)	/* simple-array */
+#define	DAT_SA0(label, typ32, length)	LB(1, label); DB(0xae); typ(typ32); imm(length)	/* simple-array */
 
 #define PADDINGPREFIX()					DB(0xfe,0x01,0xff)
 #define ALIGNPREFIX0()					DB(0xfe,0x01,0xfc)

@@ -71,9 +71,9 @@ int jitcStepPointer(OsecpuJitc *jitc)
 			jitcSetRetCode(pRC, JITC_BAD_LABEL_TYPE); // P3Fにデータラベルを代入できない.
 		goto fin;
 	}
-	if (opecode == 0x0e) {	// PADD(r, bit, p1, typ, p0);
+	if (opecode == 0x0e) {	// PADD(p1, typ, r, bit, p0);
 		jitcSetHh4BufferSimple(jitc, 6);
-		r = ip[1]; bit = ip[2]; p1 = ip[3]; typ = ip[4]; p0 = ip[5];
+		p1 = ip[1]; typ = ip[2]; r = ip[3]; bit = ip[4]; p0 = ip[5];
 		jitcStep_checkPxx(pRC, p0);
 		jitcStep_checkPxx(pRC, p1);
 		jitcStep_checkRxx(pRC, r);
@@ -187,31 +187,13 @@ void execStepPointer(OsecpuVm *vm)
 		if (p == 0x3f)
 			ip = (const Int32 *) vm->defines->label[i].dst;
 		else {
-			typ = vm->defines->label[i].typ;
-			vm->p[p].typ = typ;
-			if (typ >= 2) {
-				vm->p[p].p = (unsigned char *) (vm->defines->label[i].dst + 3);
-				vm->p[p].p0 = vm->p[p].p;
-				len = vm->defines->label[i].dst[2]; // 2e(data)のlenフィールド値.
-				getTypSize(typ, &typSize0, &typSize1, &typSign);
-				vm->p[p].p1 = vm->p[p].p + typSize1 * len;
-				vm->p[p].bit = vm->p[p].p + ((typSize1 * len + 3) / 4) * 4;
-				vm->p[p].flags = 6; // over-seek:ok, read:ok, write:ok
-			}
-			if (typ == PTR_TYP_CODE) {	// コードラベル.
-				vm->p[p].p = (unsigned char *) vm->defines->label[i].dst;
-				vm->p[p].p0 = vm->p[p].p;
-				vm->p[p].p1 = vm->p[p].p + 1;
-				vm->p[p].flags = 0; // over-seek:ok, read:err, write:err
-			}
-			if (typ == 1) {		// VPtr.
-			}
+			execStep_plimm(vm, p, i);
 			ip += 3;
 		}
 		goto fin;
 	}
-	if (opecode == 0x0e) {	// PADD(r, bit, p1, typ, p0);
-		r = ip[1]; bit = ip[2]; p1 = ip[3]; typ = ip[4]; p0 = ip[5];
+	if (opecode == 0x0e) {	// PADD(p1, typ, r, bit, p0);
+		p1 = ip[1]; typ = ip[2]; r = ip[3]; bit = ip[4]; p0 = ip[5];
 		getTypSize(typ, &typSize0, &typSize1, &typSign);
 		i = execStep_checkBitsRange(vm->r[r], bit, vm, 0, 0);
 		vm->p[p0] = vm->p[p1];
@@ -280,6 +262,31 @@ void execStep_checkMemAccess(OsecpuVm *vm, int p, int typ, int flag)
 		jitcSetRetCode(&vm->errorCode, EXEC_BAD_ACCESS);
 
 	// ToDo: liveSignに対応する.
+	return;
+}
+
+void execStep_plimm(OsecpuVm *vm, int p, int i)
+{
+	int r, p0, p1, bit, typ, len, typSign, typSize0, typSize1;
+	typ = vm->defines->label[i].typ;
+	vm->p[p].typ = typ;
+	if (typ >= 2) {
+		vm->p[p].p = (unsigned char *) (vm->defines->label[i].dst + 3);
+		vm->p[p].p0 = vm->p[p].p;
+		len = vm->defines->label[i].dst[2]; // 2e(data)のlenフィールド値.
+		getTypSize(typ, &typSize0, &typSize1, &typSign);
+		vm->p[p].p1 = vm->p[p].p + typSize1 * len;
+		vm->p[p].bit = vm->p[p].p + ((typSize1 * len + 3) / 4) * 4;
+		vm->p[p].flags = 6; // over-seek:ok, read:ok, write:ok
+	}
+	if (typ == PTR_TYP_CODE) {	// コードラベル.
+		vm->p[p].p = (unsigned char *) vm->defines->label[i].dst;
+		vm->p[p].p0 = vm->p[p].p;
+		vm->p[p].p1 = vm->p[p].p + 1;
+		vm->p[p].flags = 0; // over-seek:ok, read:err, write:err
+	}
+	if (typ == 1) {		// VPtr.
+	}
 	return;
 }
 

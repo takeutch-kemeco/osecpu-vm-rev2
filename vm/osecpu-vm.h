@@ -121,15 +121,15 @@ int jitcAll(OsecpuJitc *jitc);
 int execStep(OsecpuVm *r); // 検証済みのOSECPU命令を一つだけ実行する.
 int execAll(OsecpuVm *vm);
 
-#define EXEC_BAD_BITS			1
-#define EXEC_BITS_RANGE_OVER	2
-#define EXEC_BAD_R2				3	// SBX, SHL, SARのr2が不適切.
-#define EXEC_DIVISION_BY_ZERO	4
-#define EXEC_SRC_OVERRUN		5
-#define EXEC_TYP_MISMATCH		6
-#define EXEC_PTR_RANGE_OVER		7
-#define EXEC_BAD_ACCESS			8
-#define EXEC_API_ERROR			9
+#define EXEC_BAD_BITS			 1+256
+#define EXEC_BITS_RANGE_OVER	 2+256
+#define EXEC_BAD_R2				 3+256	// SBX, SHL, SARのr2が不適切.
+#define EXEC_DIVISION_BY_ZERO	 4+256
+#define EXEC_SRC_OVERRUN		 5+256
+#define EXEC_TYP_MISMATCH		 6+256
+#define EXEC_PTR_RANGE_OVER		 7+256
+#define EXEC_BAD_ACCESS			 8+256
+#define EXEC_API_ERROR			 9+256
 #define EXEC_ABORT_OPECODE_M1	0xffff
 
 #define EXEC_CMA_FLAG_SEEK		1
@@ -170,6 +170,7 @@ void execStepPointer(OsecpuVm *vm);
 void getTypSize(int typ, int *typSize0, int *typSize1, int *typSign); // これは直すべき.
 void jitcStep_checkPxx(int *pRC, int pxx);
 void execStep_checkMemAccess(OsecpuVm *vm, int p, int typ, int flag);
+void execStep_plimm(OsecpuVm *vm, int p, int i);
 
 // float.c : 浮動小数点命令
 void jitcInitFloat(OsecpuJitc *jitc);
@@ -188,3 +189,9 @@ void jitcInitExtend(OsecpuJitc *jitc);
 int jitcStepExtend(OsecpuJitc *jitc);
 int jitcAfterStepExtend(OsecpuJitc *jitc);
 void execStepExtend(OsecpuVm *vm);
+
+// decode.c : フロントエンドコード関係.
+int decode_upx  (const unsigned char *p, const unsigned char *p1, unsigned char *q, unsigned char *q1);
+int decode_tek5 (const unsigned char *p, const unsigned char *p1, unsigned char *q, unsigned char *q1);
+int decode_fcode(const unsigned char *p, const unsigned char *p1, unsigned char *q, unsigned char *q1);
+

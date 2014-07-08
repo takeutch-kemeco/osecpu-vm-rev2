@@ -1,0 +1,31 @@
+#include "osecpu_ask.h"
+
+%define	L_POINT		LOCAL(0)
+
+LOCALLABELS(1);
+
+
+	Int32s col:R00, x0:R01, y0:R02, x1:R03, y1:R04, i:R05, j:R06;
+
+//	PLIMM(P01, L_POINT);
+
+DAT_SA(L_POINT, T_UINT8, 16 * 2);
+	DB(196, 100, 187,  61, 164,  29, 129,   9,  90,   5);
+	DB( 53,  17,  23,  44,   7,  81,   7, 119,  23, 156);
+	DB( 53, 183,  90, 195, 129, 191, 164, 171, 187, 139);
+	DB(196, 100);
+DAT_END();
+
+	for (i = 0; i != 15; i++) {
+		LMEM0PP(32, R01, T_UINT8, P01); LMEM0PP(32, R02, T_UINT8, P01); // x0, y0.
+		PLIMM(P02, L_POINT);
+		for (j = -8; j != 8; j++) {
+			LMEM0PP(32, R03, T_UINT8, P02); LMEM0PP(32, R04, T_UINT8, P02); // x1, y1.
+			col = i - j;
+			if (col <= 0) { col = 1 - col; }
+			if (col <= 7) {
+				api_drawLine(MODE_OR, col, x0, y0, x1, y1);
+			}
+		}
+	}
+

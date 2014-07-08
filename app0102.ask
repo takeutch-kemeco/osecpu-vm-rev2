@@ -3,6 +3,6 @@
 	Int32s x:R00;
 
 	for (x = 0; x != 640; x++) {
-		api_drawLine(MODE_XOR, 6, x, 0,   0,   479);
-		api_drawLine(MODE_XOR, 6, x, 479, 639, 0  );
+		api_drawLine(MODE_XOR, 3, x,  0,  0, -1);
+		api_drawLine(MODE_XOR, 3, x, -1, -1,  0);
 	}

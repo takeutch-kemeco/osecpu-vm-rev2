@@ -172,9 +172,9 @@ int main(int argc, const UCHAR **argv)
 			 "  aska   ver.0.20\n"//108
 			 "  prepro ver.0.01\n"
 			 "  lbstk  ver.0.03\n"
-			 "  db2bin ver.0.13\n"
+			 "  db2bin ver.0.15\n"//110
 			 "  disasm ver.0.02\n"
-			 "  appack ver.0.19\n"
+			 "  appack ver.0.20\n"//110
 			 "  maklib ver.0.01\n"
 			 "  getint ver.0.06\n"
 			 "  osastr ver.0.00\n"
@@ -2462,6 +2462,8 @@ int db2binSub0(struct Work *w, const UCHAR **pp, UCHAR **qq);
 UCHAR *db2binSub1(const UCHAR **pp, UCHAR *q, int width);
 UCHAR *db2binSub2(UCHAR *p0, UCHAR *p1); // ラベル番号の付け直し.
 
+#define DB2BIN_HEADER_LENGTH	3
+
 int db2bin(struct Work *w)
 {
 	const UCHAR *pi = w->ibuf;
@@ -2481,11 +2483,11 @@ int db2bin(struct Work *w)
 	}
 	putchar(0); // これがないとGCCがおかしくなる.
 	if ((w->flags & 1) == 0 && q != NULL)
-		q = db2binSub2(w->obuf + 4, q);
+		q = db2binSub2(w->obuf + DB2BIN_HEADER_LENGTH, q);
 #if 0
 	if (*pi == '\0' && q != NULL /* && (w->obuf[4] & 0xf0) != 0 */) {
 	//	fputs("osecpu binary first byte error.\n", stderr);
-		for (r = q - w->obuf - 1; r >= 2; r--)
+		for (r = q - w->obuf - 1; r >= DB2BIN_HEADER_LENGTH; r--)
 			w->obuf[r + 1] = w->obuf[r];
 		w->obuf[2] = 0x00;
 		q++;
@@ -2529,39 +2531,46 @@ int db2binSub0(struct Work *w, const UCHAR **pp, UCHAR **qq)
 		}
 
 		static UCHAR *table1[] = {
-			"0OSECPU_HEADER(",		"DB(0x05,0xec,0x02,0x00);",
+			"0OSECPU_HEADER(",		"DB(0x05,0xe2,0x00);",
+
+			"1bit(",				"DB(0xf7,0x88); DDBE(%0);", // 6bytes.
+			"1imm(",				"DB(0xf7,0x88); DDBE(%0);", // 6bytes.
+			"1typ(",				"DB(0xf7,0x88); DDBE(%0);", // 6bytes.
+			"1r(",					"DB(%0+0x80);", // 1byte.
+			"1p(",					"DB(%0-0x40+0x80);", // 1byte.
+
 			"0NOP(",				"DB(0xf0);",
-			"2LB(",					"DB(0xf1,0xf7,0x88); DDBE(%1); DB(0xf7,0x88); DDBE(%0);",
-			"3LIMM(",				"DB(0xf2,0xf7,0x88); DDBE(%2); DB(%1+0x80,0xfc,%0);",
-			"2PLIMM(",				"DB(0xf3,0xf7,0x88); DDBE(%1); DB(%0-0x40+0x80);",
-			"1CND(",				"DB(0xf4,%0+0x80);",
-		//	"4LMEM(",				"DB(0x08,%0); DDBE(%1); DB(%2-0x40,%3);",
+			"2LB(",					"DB(0xf1); imm(%1); imm(%0);",
+			"3LIMM(",				"DB(0xf2); imm(%2); r(%1); bit(%0);",
+			"2PLIMM(",				"DB(0xf3); imm(%1); p(%0);",
+			"1CND(",				"DB(0xf4); r(%0);",
+			"5LMEM(",				"DB(0x88); p(%3); typ(%2); imm(%4); r(%1); bit(%0);",
 		//	"4SMEM(",				"DB(0x09,%0); DDBE(%1); DB(%2-0x40,%3);",
 		//	"4PLMEM(",				"DB(0x0a,%0-0x40); DDBE(%1); DB(%2-0x40,%3);",
 		//	"4PSMEM(",				"DB(0x0b,%0-0x40); DDBE(%1); DB(%2-0x40,%3);",
-		//	"4PADD(",				"DB(0x0e,%0-0x40); DDBE(%1); DB(%2-0x40,%3);",
+			"5PADD(",				"DB(0x8e); p(%3); typ(%2); r(%4); bit(%0); p(%1);",
 		//	"4PDIF(",				"DB(0x0f,%0); DDBE(%1); DB(%2-0x40,%3-0x40);",
-			"3CP(",					"DB(0x90,%2+0x80,%2+0x80,%1+0x80,0xfc,%0);",
-		//	"3OR(",					"DB(0x10,%0,%1,%2);",
-		//	"3XOR(",				"DB(0x11,%0,%1,%2);",
-		//	"3AND(",				"DB(0x12,%0,%1,%2);",
-		//	"3SBX(",				"DB(0x13,%0,%1,%2);",
-			"4ADD(",				"DB(0x94,%2+0x80,%3+0x80,%1+0x80,0xfc,%0);",
-		//	"3SUB(",				"DB(0x15,%0,%1,%2);",
-		//	"3MUL(",				"DB(0x16,%0,%1,%2);",
-		//	"3SHL(",				"DB(0x18,%0,%1,%2);",
-		//	"3SAR(",				"DB(0x19,%0,%1,%2);",
-		//	"3DIV(",				"DB(0x1a,%0,%1,%2);",
-		//	"3MOD(",				"DB(0x1b,%0,%1,%2);",
-			"2PCP(",				"DB(0x9e,%1-0x40+0x80,%0-0x40+0x80);",
-		//	"3CMPE(",				"DB(0x20,%0,%1,%2);",
-			"5CMPNE(",				"DB(0xa1,%3+0x80,%4+0x80,0xfc,%1,%2+0x80,0xfc,%0);",
-		//	"3CMPL(",				"DB(0x22,%0,%1,%2);",
-		//	"3CMPGE(",				"DB(0x23,%0,%1,%2);",
-		//	"3CMPLE(",				"DB(0x24,%0,%1,%2);",
-		//	"3CMPG(",				"DB(0x25,%0,%1,%2);",
-		//	"3TSTZ(",				"DB(0x26,%0,%1,%2);",
-		//	"3TSTNZ(",				"DB(0x27,%0,%1,%2);",
+			"3CP(",					"DB(0x90); r(%2); r(%2); r(%1); bit(%0);",
+			"4OR(",					"DB(0x90); r(%2); r(%3); r(%1); bit(%0);",
+			"4XOR(",				"DB(0x91); r(%2); r(%3); r(%1); bit(%0);",
+			"4AND(",				"DB(0x92); r(%2); r(%3); r(%1); bit(%0);",
+			"4SBX(",				"DB(0x93); r(%2); r(%3); r(%1); bit(%0);",
+			"4ADD(",				"DB(0x94); r(%2); r(%3); r(%1); bit(%0);",
+			"4SUB(",				"DB(0x95); r(%2); r(%3); r(%1); bit(%0);",
+			"4MUL(",				"DB(0x96); r(%2); r(%3); r(%1); bit(%0);",
+			"4SHL(",				"DB(0x98); r(%2); r(%3); r(%1); bit(%0);",
+			"4SAR(",				"DB(0x99); r(%2); r(%3); r(%1); bit(%0);",
+			"4DIV(",				"DB(0x9a); r(%2); r(%3); r(%1); bit(%0);",
+			"4MOD(",				"DB(0x9b); r(%2); r(%3); r(%1); bit(%0);",
+			"2PCP(",				"DB(0x9e); p(%1); p(%0);",
+			"5CMPE(",				"DB(0xa0); r(%3); r(%4); bit(%1); r(%2); bit(%0);",
+			"5CMPNE(",				"DB(0xa1); r(%3); r(%4); bit(%1); r(%2); bit(%0);",
+			"5CMPL(",				"DB(0xa2); r(%3); r(%4); bit(%1); r(%2); bit(%0);",
+			"5CMPGE(",				"DB(0xa3); r(%3); r(%4); bit(%1); r(%2); bit(%0);",
+			"5CMPLE(",				"DB(0xa4); r(%3); r(%4); bit(%1); r(%2); bit(%0);",
+			"5CMPG(",				"DB(0xa5); r(%3); r(%4); bit(%1); r(%2); bit(%0);",
+			"5TSTZ(",				"DB(0xa6); r(%3); r(%4); bit(%1); r(%2); bit(%0);",
+			"5TSTNZ(",				"DB(0xa7); r(%3); r(%4); bit(%1); r(%2); bit(%0);",
 		//	"3PCMPE(",				"DB(0x28,%0,%1-0x40,%2-0x40);",
 		//	"3PCMPNE(",				"DB(0x29,%0,%1-0x40,%2-0x40);",
 		//	"3PCMPL(",				"DB(0x2a,%0,%1-0x40,%2-0x40);",
@@ -2575,24 +2584,24 @@ int db2binSub0(struct Work *w, const UCHAR **pp, UCHAR **qq)
 		//	"1DBGINFO(",			"DBGINFO0(%0);",
 			"1JMP(",				"PLIMM(P3F, %0);",
 			"1PJMP(",				"PCP(P3F, %0);",
-		//	"4PADDI(",				"LIMM(%0, R3F, %3); PADD(%0, %1, %2, R3F);",
-		//	"3ORI(",				"LIMM(R3F, %2); OR( %0, %1, R3F);",
-		//	"3XORI(",				"LIMM(R3F, %2); XOR(%0, %1, R3F);",
-		//	"3ANDI(",				"LIMM(R3F, %2); AND(%0, %1, R3F);",
-		//	"3SBXI(",				"LIMM(R3F, %2); SBX(%0, %1, R3F);",
+			"5PADDI(",				"LIMM(%0, R3F, %4); PADD(%0, %1, %2, %3, R3F);",
+			"4ORI(",				"LIMM(%0, R3F, %3); OR( %0, %1, %2, R3F);",
+			"4XORI(",				"LIMM(%0, R3F, %3); XOR(%0, %1, %2, R3F);",
+			"4ANDI(",				"LIMM(%0, R3F, %3); AND(%0, %1, %2, R3F);",
+			"4SBXI(",				"LIMM(%0, R3F, %3); SBX(%0, %1, %2, R3F);",
 			"4ADDI(",				"LIMM(%0, R3F, %3); ADD(%0, %1, %2, R3F);",
-		//	"3SUBI(",				"LIMM(R3F, %2); SUB(%0, %1, R3F);",
-		//	"3MULI(",				"LIMM(R3F, %2); MUL(%0, %1, R3F);",
-		//	"3SHLI(",				"LIMM(R3F, %2); SHL(%0, %1, R3F);",
-		//	"3SARI(",				"LIMM(R3F, %2); SAR(%0, %1, R3F);",
-		//	"3DIVI(",				"LIMM(R3F, %2); DIV(%0, %1, R3F);",
-		//	"3MODI(",				"LIMM(R3F, %2); MOD(%0, %1, R3F);",
-		//	"3CMPEI(",				"LIMM(R3F, %2); CMPE( %0, %1, R3F);",
+			"4SUBI(",				"LIMM(%0, R3F, %3); SUB(%0, %1, %2, R3F);",
+			"4MULI(",				"LIMM(%0, R3F, %3); MUL(%0, %1, %2, R3F);",
+			"4SHLI(",				"LIMM(%0, R3F, %3); SHL(%0, %1, %2, R3F);",
+			"4SARI(",				"LIMM(%0, R3F, %3); SAR(%0, %1, %2, R3F);",
+			"4DIVI(",				"LIMM(%0, R3F, %3); DIV(%0, %1, %2, R3F);",
+			"4MODI(",				"LIMM(%0, R3F, %3); MOD(%0, %1, %2, R3F);",
+			"5CMPEI(",				"LIMM(%1, R3F, %4); CMPE( %0, %1, %2, %3, R3F);",
 			"5CMPNEI(",				"LIMM(%1, R3F, %4); CMPNE(%0, %1, %2, %3, R3F);",
-		//	"3CMPLI(",				"LIMM(R3F, %2); CMPL( %0, %1, R3F);",
-		//	"3CMPGEI(",				"LIMM(R3F, %2); CMPGE(%0, %1, R3F);",
-		//	"3CMPLEI(",				"LIMM(R3F, %2); CMPLE(%0, %1, R3F);",
-		//	"3CMPGI(",				"LIMM(R3F, %2); CMPG( %0, %1, R3F);",
+			"5CMPLI(",				"LIMM(%1, R3F, %4); CMPL( %0, %1, %2, %3, R3F);",
+			"5CMPGEI(",				"LIMM(%1, R3F, %4); CMPGE(%0, %1, %2, %3, R3F);",
+			"5CMPLEI(",				"LIMM(%1, R3F, %4); CMPLE(%0, %1, %2, %3, R3F);",
+			"5CMPGI(",				"LIMM(%1, R3F, %4); CMPG( %0, %1, %2, %3, R3F);",
 			NULL
 		};
 		for (i = 0; table1[i] != NULL; i += 2) {
@@ -2738,12 +2747,24 @@ int db2binSub2Len(const UCHAR *src)
 	int i = 0, j;
 	if (*src == 0xf0) i = 1; // NOP
 	if (src[0] == 0xf1 && src[1] == 0xf7 && src[2] == 0x88 && src[7] == 0xf7 && src[8] == 0x88) i = 13; // LB
-	if (src[0] == 0xf2 && src[1] == 0xf7 && src[2] == 0x88) i = 10; // LIMM
+	if (src[0] == 0xf2 && src[1] == 0xf7 && src[2] == 0x88) i = 14; // LIMM
 	if (src[0] == 0xf3 && src[1] == 0xf7 && src[2] == 0x88) i = 8; // PLIMM
 	if (src[0] == 0xf4) i = 2; // CND
-	if (0x90 <= src[0] && src[0] <= 0x9b && src[0] != 0x97 && src[4] == 0xfc) i = 6; // OR...MOD
+	if (src[0] == 0x88 && src[2] == 0xf7 && src[3] == 0x88 && src[8] == 0xf7 && src[9] == 0x88 && src[15] == 0xf7 && src[16] == 0x88) i = 21;
+	if (src[0] == 0x8e && src[2] == 0xf7 && src[3] == 0x88 && src[9] == 0xf7 && src[10] == 0x88) i = 16;
+	if (0x90 <= src[0] && src[0] <= 0x9b && src[0] != 0x97 && src[4] == 0xf7 && src[5] == 0x88) i = 10; // OR...MOD
 	if (src[0] == 0x9e) i = 3; // PCP
-	if (0xa0 <= src[0] && src[0] <= 0xa7 && src[3] == 0xfc && src[6] == 0xfc) i = 8; // CMPcc
+	if (0xa0 <= src[0] && src[0] <= 0xa7 && src[3] == 0xf7 && src[4] == 0x88 && src[10] == 0xf7 && src[11] == 0x88) i = 16; // CMPcc
+	if (src[0] == 0xae && src[1] == 0xf7 && src[2] == 0x88 && src[7] == 0xf7 && src[8] == 0x88) {
+		j = src[ 3] << 24 | src[ 4] << 16 | src[ 5] << 8 | src[ 6];
+		i = src[ 9] << 24 | src[10] << 16 | src[11] << 8 | src[12];
+		j = db2binDataWidth(j);
+		if (j <= 0)
+			fputs("db2binSub2Len: error: F0\n", stderr);
+		if (((i * j) & 7) != 0)
+			fprintf(stderr, "db2binSub2Len: error: F0 (align 8bit) bit=%d len=%d\n", j, i);
+		i = 13 + ((i * j) >> 3);
+	}
 	if (src[0] == 0xfc && src[1] == 0xfd && src[2] == 0xf7 && src[3] == 0x88 && src[8] == 0xf0) i = 9; // LIDR
 	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x00) i = 3; // remark-0
 	if (src[0] == 0xfc && src[1] == 0xfe && src[2] == 0x10) i = 3; // remark-1
@@ -2808,7 +2829,7 @@ UCHAR *db2binSub2(UCHAR *p0, UCHAR *p1)
 			if (*p == 0xf3)
 				t[j]--; // このラベルは参照されているので消さない.
 			if (*p == 0xf1 && p[12] != 0x00) // bugfix: hinted by yao, 2013.09.17. thanks!
-				t[j]--; // データラベルの暗黙代入があるのでこのラベルは消せない.
+				t[j]--; // データラベルの暗黙代入がありえるのでこのラベルは消せない.
 		}
 		p += db2binSub2Len(p);
 	}
@@ -3136,7 +3157,7 @@ void appackSub1(UCHAR **qq, char *pof, int i, char uf)
 
 int appackEncodeConst(int i)
 {
-	if (i <= -16) i -= 0x50; /* -0x60以下へ */
+	if (i <= -0x11) i -= 0x50; /* -0x61以下へ */
 	if (0x100 <= i && i <= 0x10000 && (i & (i - 1)) == 0) {
 		i = - askaLog2(i) - 0x48; /* -0x50から-0x58へ (-0x59から-0x5fはリザーブ) */
 	}
@@ -3405,6 +3426,79 @@ void appackSub1op(UCHAR **qq, char *pof, int i, int *hist, UCHAR *opTbl)
 	return;
 }
 
+typedef struct _AppackWork {
+	const unsigned char *p;
+	unsigned char *q;
+	char pHalf;
+	int rep0, rep1, rep0p, rep1p, rep0f, rep1f;
+	int pxxTyp[64], labelTyp[MAXLABEL];
+	int hist[0x40];
+	unsigned char opTbl[256];
+} AppackWork;
+
+void appack_setRep(AppackWork *aw, int reg, int typ)
+{
+	if (typ == 0) {
+		aw->rep1 = aw->rep0;
+		aw->rep0 = reg;
+	}
+	if (typ == 1) {
+		aw->rep1p = aw->rep0p;
+		aw->rep0p = reg;
+	}
+	if (typ == 2) {
+		aw->rep1f = aw->rep0f;
+		aw->rep0f = reg;
+	}
+	return;
+}
+
+void appack_initWork(AppackWork *aw)
+{
+	int i;
+	for (i = 0; i < 0x40; i++)
+		aw->pxxTyp[i] = TYP_UNKNOWN;
+	for (i = 0; i < MAXLABEL; i++)
+		aw->labelTyp[i] = TYP_UNKNOWN;
+	for (i = 0; i < 0x40; i++)
+		aw->hist[i] = 0;
+	for (i = 0; i < 256; i++)
+		aw->opTbl[i] = i;
+	return;
+}
+
+void appack_initLabelTyp(struct Work *w, AppackWork *aw)
+{
+	int i;
+	const unsigned char *p, *pp;
+	for (p = w->ibuf + DB2BIN_HEADER_LENGTH; p < w->ibuf + w->isiz; ) {
+		if (*p == 0xf1) {
+			i = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
+			aw->labelTyp[i] = TYP_CODE;
+			pp = p;
+			for (;;) {
+				if (pp >= w->ibuf + w->isiz) break;
+				if (*pp != 0xf1) break;
+				pp += db2binSub2Len(pp);
+			}
+			if (pp < w->ibuf + w->isiz && *pp == 0xae) {
+				aw->labelTyp[i] = pp[3] << 24 | pp[4] << 16 | pp[5] << 8 | pp[6];
+				if (aw->pxxTyp[4] == TYP_UNKNOWN) {
+					if (aw->pxxTyp[1] == TYP_UNKNOWN)
+						aw->pxxTyp[1] = aw->labelTyp[i];
+					else if (aw->pxxTyp[2] == TYP_UNKNOWN)
+						aw->pxxTyp[2] = aw->labelTyp[i];
+					else if (aw->pxxTyp[3] == TYP_UNKNOWN)
+						aw->pxxTyp[3] = aw->labelTyp[i];
+					else /* if (pxxTyp[4] == TYP_UNKNOWN) */
+						aw->pxxTyp[4] = aw->labelTyp[i];
+				}
+			}
+		}
+		p += db2binSub2Len(p);
+	}
+	return;
+}
 
 int appack0(struct Work *w)
 {
@@ -3412,39 +3506,16 @@ int appack0(struct Work *w)
 	UCHAR *q = w->obuf, *qq;
 	*q++ = *p++;
 	*q++ = *p++;
-//	*q++ = *p++;
-//	*q++ = *p++;
 	char of = 0, f, oof, ff, fe0103 = 0;
-	UCHAR opTbl[256];
 	int r3f = 0, lastLabel = -1, i, j, wait7 = 0, firstDataLabel = -1;
-	int hist[0x40], pxxTyp[64], labelTyp[MAXLABEL];
-	for (i = 0; i < 0x40; i++)
-		hist[i] = 0;
-	for (i = 0; i < 0x40; i++) {
-		pxxTyp[i] = TYP_UNKNOWN;
-	}
-	for (i = 0; i < MAXLABEL; i++) {
-		labelTyp[i] = TYP_UNKNOWN;
-	}
-	for (i = 0; i < 256; i++)
-		opTbl[i] = i;
-	qq = db2binSub2(w->ibuf + 2, w->ibuf + w->isiz);
+	AppackWork aw;
+	qq = db2binSub2(w->ibuf + DB2BIN_HEADER_LENGTH, w->ibuf + w->isiz); // ラベル番号の付け直し.
 	w->isiz = qq - w->ibuf;
+	appack_initWork(&aw);
+	appack_initLabelTyp(w, &aw);
+
+#if 0
 	*qq = '\0';
-	while (*p != 0x00 || p == &w->ibuf[2]) {
-		if (*p == 0x01) {
-			i = p[2] << 24 | p[3] << 16 | p[4] << 8 | p[5];
-			labelTyp[i] = 1;
-			if (p[6] == 0x34 || p[6] == 0xf0) {
-				labelTyp[i] = p[7] << 24 | p[8] << 16 | p[9] << 8 | p[10];
-				if (pxxTyp[1] == TYP_UNKNOWN) {
-					pxxTyp[1] = labelTyp[i];
-					firstDataLabel = i;
-				}
-			}
-		}
-		p += db2binSub2Len(p);
-	}
 	p = w->ibuf + 2;
 	while (*p != 0x00 || p == &w->ibuf[2]) {
 //printf("%02X at %06X\n", *p, p - w->ibuf);
@@ -3964,6 +4035,7 @@ op_f0:
 		}
 #endif
 	}
+#endif
 	return putBuf(w->argOut, w->obuf, q);
 }
 

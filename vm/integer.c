@@ -158,6 +158,8 @@ int jitcAfterStepInteger(OsecpuJitc *jitc)
 }
 
 Int32 execStep_checkBitsRange(Int32 value, int bit, OsecpuVm *vm, int bit1, int bit2)
+// 関数名はcheckになっているものの、prefix2f[0]!=0の場合はチェックをクリアできるような値に補正をする.
+// つまりprefix2f[0]!=0の場合はチェックするのではなく値を補正する.
 {
 	int max, min, i;
 	if (bit1 != BIT_DISABLE_REG && bit2 != BIT_DISABLE_REG && vm->prefix2f[0] == 0) {
@@ -269,11 +271,11 @@ void execStepInteger(OsecpuVm *vm)
 			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
 			goto fin;
 		}
-		if (bit <= vm->r[0x3f] || vm->r[0x3f] < 0) {
+		if (bit < vm->r[0x3f] || vm->r[0x3f] <= 0) {
 			jitcSetRetCode(&vm->errorCode, EXEC_BAD_R2);
 			goto fin;
 		}
-		vm->r[r0] = execStep_SignBitExtend(vm->r[r1], vm->r[0x3f]);
+		vm->r[r0] = execStep_SignBitExtend(vm->r[r1], vm->r[0x3f] - 1);
 		vm->bit[r0] = bit;
 		vm->r[r0] = execStep_checkBitsRange(vm->r[r0], bit, vm, vm->bit[r1], 0);
 		ip += 5;
@@ -323,11 +325,11 @@ void execStepInteger(OsecpuVm *vm)
 	}
 	if (0x20 <= opecode && opecode <= 0x27) {
 		r1 = ip[1]; r2 = ip[2]; bit1 = ip[3]; r0 = ip[4]; bit0 = ip[5];
-		if (vm->bit[r1] != BIT_DISABLE_REG && bit > vm->bit[r1]) {
+		if (vm->bit[r1] != BIT_DISABLE_REG && bit1 > vm->bit[r1]) {
 			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
 			goto fin;
 		}
-		if (vm->bit[r2] != BIT_DISABLE_REG && bit > vm->bit[r2]) {
+		if (vm->bit[r2] != BIT_DISABLE_REG && bit1 > vm->bit[r2]) {
 			jitcSetRetCode(&vm->errorCode, EXEC_BAD_BITS);
 			goto fin;
 		}

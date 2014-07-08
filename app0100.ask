@@ -1,7 +1,7 @@
 #include "osecpu_ask.h"
 
 	Int32s c:R00, x:R01, y:R02;
-	api_openWin(256, 256);
+	api_openWin(256, 0);
 //	c = 0;
 	for (x = 0; x != 256; x++) {
 		for (y = 0; y != 256; y++) {

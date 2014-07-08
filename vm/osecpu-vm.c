@@ -247,15 +247,15 @@ int execStep(OsecpuVm *vm)
 {
 	const Int32 *ip = vm->ip;
 	vm->errorCode = 0;
+	if (ip >= vm->ip1) {
+ 		vm->errorCode = EXEC_SRC_OVERRUN;
+		goto fin;
+	}
 	execStepInteger(vm);	if (ip != vm->ip || vm->errorCode != 0) goto fin;
 	execStepOther(vm);		if (ip != vm->ip || vm->errorCode != 0) goto fin;
 	execStepPointer(vm);	if (ip != vm->ip || vm->errorCode != 0) goto fin;
 	execStepFloat(vm);		if (ip != vm->ip || vm->errorCode != 0) goto fin;
 	execStepExtend(vm);		if (ip != vm->ip || vm->errorCode != 0) goto fin;
-	if (*ip == -1) {
-		vm->errorCode = EXEC_ABORT_OPECODE_M1; // デバッグ用.
-		goto fin;
-	}
 
 	fprintf(stderr, "Error: execStep: opecode=0x%02X\n", *ip); // 内部エラー.
 	exit(1);
