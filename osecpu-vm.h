@@ -48,6 +48,7 @@ typedef struct _BitReader {
 } BitReader;
 
 #define JITC_DSTLOG_SIZE	16
+#define PREFIX2F_SIZE		16
 
 typedef struct _OsecpuJitc {
 	int phase, dstLogIndex;
@@ -60,6 +61,7 @@ typedef struct _OsecpuJitc {
 	int errorCode, instrLength;
 	Int32 dr[4]; // Integer
 	Int32 *ope04; // Integer
+	unsigned char prefix2f[PREFIX2F_SIZE]; // Integer
 } OsecpuJitc;
 
 typedef struct _OsecpuVm {
@@ -72,6 +74,7 @@ typedef struct _OsecpuVm {
 	const Int32 *ip, *ip1; /* instruction-pointer, program-counter */
 	const Defines *defines;
 	int errorCode;
+	unsigned char prefix2f[PREFIX2F_SIZE];
 } OsecpuVm;
 
 // osecpu-vm.c
@@ -112,10 +115,8 @@ int jitcAll(OsecpuJitc *jitc);
 #define JITC_BAD_LABEL_TYPE		14
 #define JITC_LABEL_UNDEFINED	15
 #define JITC_BAD_TYPE			16
-
-void jitcStep_checkBits32(int *pRC, int bits);
-void jitcStep_checkRxx(int *pRC, int rxx);
-void jitcStep_checkRxxNotR3F(int *pRC, int rxx);
+#define JITC_BAD_PREFIX			17
+#define JITC_UNSUPPORTED		18
 
 int execStep(OsecpuVm *r); // 検証済みのOSECPU命令を一つだけ実行する.
 int execAll(OsecpuVm *vm);
@@ -125,32 +126,62 @@ int execAll(OsecpuVm *vm);
 #define EXEC_BAD_R2				3	// SBX, SHL, SARのr2が不適切.
 #define EXEC_DIVISION_BY_ZERO	4
 #define EXEC_SRC_OVERRUN		5
+#define EXEC_TYP_MISMATCH		6
+#define EXEC_PTR_RANGE_OVER		7
+#define EXEC_BAD_ACCESS			8
+#define EXEC_API_ERROR			9
 #define EXEC_ABORT_OPECODE_M1	0xffff
 
-void execStep_checkBitsRange(Int32 value, int bits, OsecpuVm *vm);
+#define EXEC_CMA_FLAG_SEEK		1
+#define EXEC_CMA_FLAG_READ		2
+#define EXEC_CMA_FLAG_WRITE		4
+#define EXEC_CMA_FLAG_EXEC		8
+
+#define BIT_DISABLE_REG		-1
+#define BIT_DISABLE_MEM		255
+
+#define PTR_TYP_CODE			-1
+#define PTR_TYP_NATIVECODE		-2
 
 unsigned char *hh4StrToBin(unsigned char *src, unsigned char *src1, unsigned char *dst, unsigned char *dst1);
 
-// integer.c : 整数命令
+// integer.c : 整数命令.
 void jitcInitInteger(OsecpuJitc *jitc);
 int jitcStepInteger(OsecpuJitc *jitc);
-void jitcAfterStepInteger(OsecpuJitc *jitc);
+int jitcAfterStepInteger(OsecpuJitc *jitc);
 void execStepInteger(OsecpuVm *vm);
 
-// pointer.c : ポインタ命令
+int getTypBitInteger(int typ);
+void getTypInfoInteger(int typ, int *typSize0, int *typSize1, int *typSign);
+Int32 execStep_checkBitsRange(Int32 value, int bit, OsecpuVm *vm, int bit1, int bit2);
+void jitcStep_checkBits32(int *pRC, int bits);
+void jitcStep_checkRxx(int *pRC, int rxx);
+void jitcStep_checkRxxNotR3F(int *pRC, int rxx);
+
+// pointer.c : ポインタ命令.
 void jitcInitPointer(OsecpuJitc *jitc);
 int jitcStepPointer(OsecpuJitc *jitc);
-void jitcAfterStepPointer(OsecpuJitc *jitc);
+int jitcAfterStepPointer(OsecpuJitc *jitc);
 void execStepPointer(OsecpuVm *vm);
+
+void getTypSize(int typ, int *typSize0, int *typSize1, int *typSign); // これは直すべき.
+void jitcStep_checkPxx(int *pRC, int pxx);
+void execStep_checkMemAccess(OsecpuVm *vm, int p, int typ, int flag);
 
 // float.c : 浮動小数点命令
 void jitcInitFloat(OsecpuJitc *jitc);
 int jitcStepFloat(OsecpuJitc *jitc);
-void jitcAfterStepFloat(OsecpuJitc *jitc);
+int jitcAfterStepFloat(OsecpuJitc *jitc);
 void execStepFloat(OsecpuVm *vm);
+
+// other.c : 雑命令.
+void jitcInitOther(OsecpuJitc *jitc);
+int jitcStepOther(OsecpuJitc *jitc);
+int jitcAfterStepOther(OsecpuJitc *jitc);
+void execStepOther(OsecpuVm *vm);
 
 // extend.c : 拡張命令関係.
 void jitcInitExtend(OsecpuJitc *jitc);
 int jitcStepExtend(OsecpuJitc *jitc);
-void jitcAfterStepExtend(OsecpuJitc *jitc);
+int jitcAfterStepExtend(OsecpuJitc *jitc);
 void execStepExtend(OsecpuVm *vm);

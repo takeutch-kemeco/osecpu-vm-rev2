@@ -1,5 +1,7 @@
 #include "osecpu-vm.h"
 
+void apiInit(OsecpuVm *vm);
+
 #define BUFFER_SIZE		256
 
 int main(int argc, const char **argv)
@@ -60,8 +62,15 @@ int main(int argc, const char **argv)
 		"1 2 1"							// LB1(2);
 		"ae 2 84 01 23 45 67"			// data(UINT8, 4, 0x01, 0x23, 0x45, 0x67);
 		"3 2 1"							// PLIMM(P01, 2);
-		"2 1 3 a0"						// LIMM32(R03, 1);
+		"2 84 3 a0"						// LIMM32(R03, 4);
+		"2 2 bf a0"						// LIMM32(R3F, 2);
+		"8e bf a0 1 2 1"				// PADD32(P01, UINT8, P01, R3F);
+		"88 1 2 0 3 a0"					// LMEM32(P01, UINT8, 0, R03);
 #endif
+		"2 84 b0 a0"					// LIMM32(R30, 4);
+		"3 3 b0"						// PLIMM(P30, 3);
+		"9e a8 bf"						// PCP(P3F, P28);
+		"1 3 1"							// LB1(3);
 
 		, NULL, hh4src, &hh4src[BUFFER_SIZE]
 	);
@@ -84,6 +93,7 @@ int main(int argc, const char **argv)
 	vm.ip1 = jitc.dst;
 	// この時点で、i32buf[]は破棄しても良い.
 
+	apiInit(&vm);
 	// execAll()を使って、j32buf[]内の中間コードを実行する.
 	printf("execAll()=%d\n", execAll(&vm)); // 65535なら成功(EXEC_ABORT_OPECODE_M1).
 	printf("R00=%d\n", vm.r[0x00]);

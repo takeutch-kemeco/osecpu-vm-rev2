@@ -155,8 +155,11 @@ void jitcInitDstLogSetPhase(OsecpuJitc *jitc, int phase)
 	for (i = 0; i < JITC_DSTLOG_SIZE; i++)
 		jitc->dstLog[i] = NULL;
 	jitc->dstLogIndex = 0;
+	for (i = 0; i < PREFIX2F_SIZE; i++)
+		jitc->prefix2f[i] = 0;
 	jitc->phase = phase;
 	jitcInitInteger(jitc);
+	jitcInitOther(jitc);
 	jitcInitPointer(jitc);
 	jitcInitFloat(jitc);
 	jitcInitExtend(jitc);
@@ -184,6 +187,7 @@ int jitcStep(OsecpuJitc *jitc)
 	int retcode = -1, *pRC = &retcode, i;
 	jitc->hh4Buffer[0] = hh4ReaderGetUnsigned(&jitc->hh4r);
 	retcode = jitcStepInteger(jitc);	if (retcode >= 0) goto fin;
+	retcode = jitcStepOther(jitc);		if (retcode >= 0) goto fin;
 	retcode = jitcStepPointer(jitc);	if (retcode >= 0) goto fin;
 	retcode = jitcStepFloat(jitc);		if (retcode >= 0) goto fin;
 	retcode = jitcStepExtend(jitc);		if (retcode >= 0) goto fin;
@@ -197,10 +201,11 @@ fin:
 		goto fin1;
 	for (i = 0; i < jitc->instrLength; i++)
 		jitc->dst[i] = jitc->hh4Buffer[i];
-	jitcAfterStepInteger(jitc);
-	jitcAfterStepPointer(jitc);
-	jitcAfterStepFloat(jitc);
-	jitcAfterStepExtend(jitc);
+	retcode = jitcAfterStepInteger(jitc);	if (retcode > 0) goto fin1;
+	retcode = jitcAfterStepOther(jitc);		if (retcode > 0) goto fin1;
+	retcode = jitcAfterStepPointer(jitc);	if (retcode > 0) goto fin1;
+	retcode = jitcAfterStepFloat(jitc);		if (retcode > 0) goto fin1;
+	retcode = jitcAfterStepExtend(jitc);	if (retcode > 0) goto fin1;
 	i = jitc->dstLogIndex;
 	jitc->dstLog[i] = jitc->dst; // エラーのなかった命令は記録する.
 	jitc->dstLogIndex = (i + 1) % JITC_DSTLOG_SIZE;
@@ -236,27 +241,6 @@ fin:
 	return jitc->errorCode;
 }
 
-void jitcStep_checkBits32(int *pRC, int bits)
-{
-	if (!(0 <= bits && bits <= 32))
-		jitcSetRetCode(pRC, JITC_BAD_BITS);
-	return;
-}
-
-void jitcStep_checkRxx(int *pRC, int rxx)
-{
-	if (!(0x00 <= rxx && rxx <= 0x3f))
-		jitcSetRetCode(pRC, JITC_BAD_RXX);
-	return;
-}
-
-void jitcStep_checkRxxNotR3F(int *pRC, int rxx)
-{
-	if (!(0x00 <= rxx && rxx <= 0x3e))
-		jitcSetRetCode(pRC, JITC_BAD_RXX);
-	return;
-}
-
 // exec関係.
 
 int execStep(OsecpuVm *vm)
@@ -264,6 +248,7 @@ int execStep(OsecpuVm *vm)
 	const Int32 *ip = vm->ip;
 	vm->errorCode = 0;
 	execStepInteger(vm);	if (ip != vm->ip || vm->errorCode != 0) goto fin;
+	execStepOther(vm);		if (ip != vm->ip || vm->errorCode != 0) goto fin;
 	execStepPointer(vm);	if (ip != vm->ip || vm->errorCode != 0) goto fin;
 	execStepFloat(vm);		if (ip != vm->ip || vm->errorCode != 0) goto fin;
 	execStepExtend(vm);		if (ip != vm->ip || vm->errorCode != 0) goto fin;
@@ -280,6 +265,9 @@ fin:
 
 int execAll(OsecpuVm *vm)
 {
+	int i;
+	for (i = 0; i < PREFIX2F_SIZE; i++)
+		vm->prefix2f[i] = 0;
 	for (;;) {
 		// 理想は適当な上限を決めて、休み休みでやるべきかもしれない.
 		execStep(vm);
@@ -288,16 +276,6 @@ int execAll(OsecpuVm *vm)
 	return vm->errorCode;
 }
 
-void execStep_checkBitsRange(Int32 value, int bits, OsecpuVm *vm)
-{
-	int max, min;
-	max = 1 << (bits - 1); // 例: bits=8だとmax=128になる.
-	max--; // 例: bits=8だとmax=127になる.
-	min = - max - 1; // 例: bits=8だとmin=-128になる。
-	if (!(min <= value && value <= max))
-		jitcSetRetCode(&vm->errorCode, EXEC_BITS_RANGE_OVER);
-	return;
-}
 
 // 関連ツール関数.
 

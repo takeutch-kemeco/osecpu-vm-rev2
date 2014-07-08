@@ -1,1 +1,1 @@
-c:\mingw\bin\gcc.exe -o osecpu-test.exe -Wl,-s,-lgdi32 -Os osecpu-vm.c integer.c pointer.c float.c extend.c test.c
+c:\mingw\bin\gcc.exe -o osecpu-test.exe -Wl,-s,-lgdi32 -Os osecpu-vm.c other.c integer.c pointer.c float.c extend.c api.c driver.c test.c

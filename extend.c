@@ -12,9 +12,9 @@ int jitcStepExtend(OsecpuJitc *jitc)
 	return -1;
 }
 
-void jitcAfterStepExtend(OsecpuJitc *jitc)
+int jitcAfterStepExtend(OsecpuJitc *jitc)
 {
-	return;
+	return 0;
 }
 
 void execStepExtend(OsecpuVm *vm)

@@ -95,6 +95,7 @@ int jitcStepFloat(OsecpuJitc *jitc)
 		jitcStep_checkFxx(pRC, f);
 		jitcStep_checkBits32(pRC, bit0);
 		jitcStep_checkRxxNotR3F(pRC, r);
+		jitc->prefix2f[0] = 0; // 2F-0.
 		goto fin;
 	}
 	if (0x48 <= opecode && opecode <= 0x4d) {
@@ -125,9 +126,9 @@ fin1:
 	return retcode;
 }
 
-void jitcAfterStepFloat(OsecpuJitc *jitc)
+int jitcAfterStepFloat(OsecpuJitc *jitc)
 {
-	return;
+	return 0;
 }
 
 void execStepFloat(OsecpuVm *vm)
@@ -200,7 +201,7 @@ void execStepFloat(OsecpuVm *vm)
 		}
 		vm->r[r] = (Int32) vm->f[f];
 		vm->bit[r] = bit0;
-		execStep_checkBitsRange(vm->r[r], bit0, vm);
+		vm->r[r] = execStep_checkBitsRange(vm->r[r], bit0, vm, 0, 0);
 		ip += 5;
 		goto fin;
 	}
