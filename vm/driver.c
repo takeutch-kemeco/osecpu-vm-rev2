@@ -371,6 +371,8 @@ void drv_sleep(int msec)
 #include <mach/mach.h>
 #include <Cocoa/Cocoa.h>
 
+typedef unsigned char UCHAR;
+
 void *mallocRWE(int bytes)
 {
 	void *p = malloc(bytes);
@@ -523,8 +525,9 @@ void drv_sleep(int msec)
  
 // by takeutch-kemeco, 2013.07.25-
  
-// gcc -D__linux__ osecpu.c `pkg-config blike --cflags --libs` -o osecpu
- 
+// gcc -D__linux__ -o osecpu-test osecpu-vm.c other.c integer.c pointer.c float.c extend.c api.c driver.c test.c `pkg-config blike --libs --cflags`
+
+typedef unsigned char UCHAR;
  
 void __bl_openWin_attach_vram(int, int, int*);
 void *__bld_mallocRWE(unsigned int);

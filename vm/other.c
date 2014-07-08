@@ -1,6 +1,6 @@
 #include "osecpu-vm.h"
 
-// ÇªÇÃëºÇÃñΩóﬂ: 00, 2F, FD
+// ÇªÇÃëºÇÃñΩóﬂ: 00, 2F, FD, FE
 
 void jitcInitOther(OsecpuJitc *jitc)
 {
@@ -33,6 +33,14 @@ int jitcStepOther(OsecpuJitc *jitc)
 		imm = ip[1]; r = ip[2];
  		if (0 <= r && r <= 3)
 			jitc->dr[r] = imm;
+		goto fin;
+	}
+	if (opecode == 0xfe) {	// remark
+		jitcSetHh4BufferSimple(jitc, 3);
+		imm = ip[1]; i = ip[2];
+		jitc->instrLength = 0; // é©ëOÇ≈èàóùÇ∑ÇÈÇÃÇ≈ÅAÇ±ÇÃílÇÕ0Ç…Ç∑ÇÈ.
+		for (j = 0; j < i; j++)
+			hh4ReaderGetUnsigned(&jitc->hh4r); // ì«Ç›éÃÇƒÇÈ.
 		goto fin;
 	}
 	goto fin1;
@@ -77,6 +85,7 @@ void execStepOther(OsecpuVm *vm)
 		imm = ip[1]; r = ip[2];
  		if (0 <= r && r <= 3)
 			vm->dr[r] = imm;
+		ip += 3;
 		goto fin;
 	}
 fin:

@@ -97,3 +97,27 @@
     bit5:   (1:fillしない)
     色指定について、8色モードの色の割り当ては変更になった。
 
+2014.05.29木:
+  rev1のremarkを整理： （ http://osecpu.osask.jp/wiki/?page0032 が微妙に間違っているので）
+    DB(0xfe,0x01,0x00); // DEBUGINFO1（モジュール番号など）.
+    DB(0xfe,0x01,0x01); // for構文終了.
+    DB(0xfe,0x01,0x03); // CALL/CALLR切り替え用プリフィクス.
+    DB(0xfe,0x01,0xfc); // ALIGNPREFIX0.
+    DB(0xfe,0x01,0xfd); // ALIGNPREFIX1.
+    DB(0xfe,0x01,0xff); // appackに対して、パディングFの出力を指示.
+    DB(0xfe,0x05,0x02); // for構文開始.
+    DB(0xfe,0x05,0x00); // DEBUGINFO0（行番号など）.
+    DB(0xfe,0x05,0x01); // 関数呼び出し構文開始マーク（実行には関係ないので無視される）
+  rev2のremarkをどうするか：
+    cfe-n-len-...
+    DEBUGINFO0は、cfd-uimm-0で代用する。
+    cfe-0-0 :   DEBUGINFO1（モジュール番号など）
+    cfe-1-0 :   関数呼び出し構文開始マーク
+    cfe-2-1-n : for構文開始
+    cfe-3-0 :   for構文終了
+    cfe-4-0 :   CALL/CALLR切り替え用プリフィクス
+    cfe-5-0 :   appackに対して、パディングFの出力を指示
+    cfe-6-0 :   ALIGNPREFIX0
+    cfe-7-0 :   ALIGNPREFIX1
+  hh4は788を付ければ32bitで書ける。
+

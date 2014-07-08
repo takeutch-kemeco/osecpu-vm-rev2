@@ -1,6 +1,8 @@
 #include "osecpu-vm.h"
 #include <setjmp.h>
 
+// OsecpuMain()はこのapi.cにあります！
+
 typedef struct _ApiWork {
 	char winClosed, autoSleep;
 //	jmp_buf setjmpEnv;
@@ -11,7 +13,62 @@ typedef struct _ApiWork {
 static ApiWork apiWork;
 
 const Int32 *apiEntry(OsecpuVm *vm);
+void apiInit(OsecpuVm *vm);
 void apiEnd(OsecpuVm *vm);
+
+#define BUFFER_SIZE		1024 * 1024	// 1M
+
+int OsecpuMain(int argc, const unsigned char **argv)
+{
+	Defines defs;
+	OsecpuJitc jitc;
+	OsecpuVm vm;
+	unsigned char *byteBuf0 = malloc(BUFFER_SIZE);
+	Int32 *j32buf = malloc(BUFFER_SIZE * sizeof (Int32));
+	int fileSize, rc;
+	FILE *fp;
+	jitc.defines = &defs;
+	vm.defines = &defs;
+	if (argc <= 1) {
+		fputs("usage>osecpu app.ose\n", stderr);
+		exit(1);
+	}
+	fp = fopen(argv[1], "rb");
+	if (fp == NULL) {
+		fputs("fopen error.\n", stderr);
+		exit(1);
+	}
+	fileSize = fread(byteBuf0, 1, BUFFER_SIZE, fp);
+	fclose(fp);
+	if (fileSize >= BUFFER_SIZE) {
+		fputs("app-file too large.\n", stderr);
+		exit(1);
+	}
+	if (byteBuf0[0] != 0x05 || byteBuf0[1] != 0xec || byteBuf0[2] != 0x02 || byteBuf0[3] != 0x00) {
+		fputs("app-file signature mismatch.\n", stderr);
+		exit(1);
+	}
+	hh4ReaderInit(&jitc.hh4r, byteBuf0 + 4, 0, byteBuf0 + fileSize, 0);
+	jitc.dst  = j32buf;
+	jitc.dst1 = j32buf + BUFFER_SIZE;
+	rc = jitcAll(&jitc);
+	if (rc != 0) {
+		fprintf(stderr, "jitcAll()=%d\n", rc);
+		exit(1);
+	}
+	*jitc.dst = -1; // 終端のための特殊opecode.
+	vm.ip  = j32buf;
+	vm.ip1 = jitc.dst;
+
+	apiInit(&vm);
+	rc = execAll(&vm);
+	if (rc != 65535) {
+		fprintf(stderr, "execAll()=%d\n", rc); // 65535なら成功(EXEC_ABORT_OPECODE_M1).
+		exit(1);
+	}
+	apiEnd(&vm);
+	return 0;
+}
 
 /* driver.c */
 void *mallocRWE(int bytes); // 実行権付きメモリのmalloc.
@@ -31,7 +88,7 @@ void apiInit(OsecpuVm *vm)
 	vm->p[0x28].p = (void *) &apiEntry;
 	apiWork.winClosed = 0;
 	apiWork.autoSleep = 0;
-	apiWork.lastConsoleChar = 0;
+	apiWork.lastConsoleChar = '\n';
 //	if (setjmp(apiWork.setjmpEnv) != 0)
 //		apiEnd(vm);
 	return;
@@ -306,7 +363,48 @@ void api0002_drawPoint(OsecpuVm *vm)
 	return;
 }
 
-void api0003_drawLine(OsecpuVm *vm) { }
+void api0003_drawLine(OsecpuVm *vm)
+{
+	int c = apiLoadColor(vm, 0x32), modeC = apiGetRxx(vm, 0x31, 4) & 0x0c;
+	int x0 = apiGetRxx(vm, 0x33, 16), y0 = apiGetRxx(vm, 0x34, 16);
+	int x1 = apiGetRxx(vm, 0x35, 16), y1 = apiGetRxx(vm, 0x36, 16);
+	int dx, dy, x, y, len, i;
+	apiCheckPoint(vm, x0, y0);
+	apiCheckPoint(vm, x1, y1);
+	dx = x1 - x0;
+	dy = y1 - y0;
+	x = x0 << 10;
+	y = y0 << 10;
+	if (dx < 0) dx = - dx;
+	if (dy < 0) dy = - dy;
+	if (dx >= dy) {
+		len = dx + 1; dx = 1024;
+		if (x0 > x1) dx *= -1;
+		if (y0 > y1) dy *= -1;
+		dy = (dy << 10) / len;
+	} else {
+		len = dy + 1; dy = 1024;
+		if (y0 > y1) dy *= -1;
+		if (x0 > x1) dx *= -1;
+		dx = (dx << 10) / len;
+	}
+	if (modeC == 0) {
+		for (i = 0; i < len; i++) {
+			vram[(x >> 10) + (y >> 10) * v_xsiz] =  c;
+			x += dx;
+			y += dy;
+		}
+	} else {
+		for (i = 0; i < len; i++) {
+			if (modeC == 0x04) vram[(x >> 10) + (y >> 10) * v_xsiz] |= c;
+			if (modeC == 0x08) vram[(x >> 10) + (y >> 10) * v_xsiz] ^= c;
+			if (modeC == 0x0c) vram[(x >> 10) + (y >> 10) * v_xsiz] &= c;
+			x += dx;
+			y += dy;
+		}
+	}
+	return;
+}
 
 void api0004_rect(OsecpuVm *vm)
 // Rect(mode:R31, c:R32, xsiz:R33, ysiz:R34, x0:R35, y0:R36)
