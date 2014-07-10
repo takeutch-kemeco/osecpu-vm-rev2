@@ -141,6 +141,7 @@ void fcode_putAlu(DecodeFcodeStr *s, int opecode, int bit, int r0, int r1, int r
 void fcode_putCp(DecodeFcodeStr *s, int bit, int r0, int r1);
 void fcode_putPcp(DecodeFcodeStr *s, int p0, int p1);
 int fcode_putLimmOrCp(DecodeFcodeStr *s, int bit, int r);
+void fcode_ope2(DecodeFcodeStr *s);
 void fcode_ope3(DecodeFcodeStr *s);
 void fcode_ope06(DecodeFcodeStr *s);
 void fcode_ope07(DecodeFcodeStr *s);
@@ -152,6 +153,7 @@ void fcode_api0002(DecodeFcodeStr *s);
 void fcode_api0003(DecodeFcodeStr *s);
 void fcode_api0004(DecodeFcodeStr *s);
 void fcode_api0005(DecodeFcodeStr *s);
+void fcode_api0009(DecodeFcodeStr *s);
 void fcode_api0010(DecodeFcodeStr *s);
 int fcode_initLabel(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1);
 int fcode_fixLabel(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1);
@@ -252,6 +254,10 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 				s->waitLb0 = 0;
 			goto fin;
 		}
+		if (opecode == 0x2) {
+			fcode_ope2(s);
+			goto fin;
+		}
 		if (opecode == 0x3) {
 			fcode_ope3(s);
 			goto fin;
@@ -271,6 +277,7 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 			if (i == 0x0003) { fcode_api0003(s); goto fin; }
 			if (i == 0x0004) { fcode_api0004(s); goto fin; }
 			if (i == 0x0005) { fcode_api0005(s); goto fin; }
+			if (i == 0x0009) { fcode_api0009(s); goto fin; }
 			if (i == 0x0010) { fcode_api0010(s); goto fin; }
 		}
 		if (opecode == 0x6) {
@@ -648,6 +655,25 @@ void fcode_putPcallP2f(DecodeFcodeStr *s)
 	return;
 }
 
+void fcode_ope2(DecodeFcodeStr *s)
+{
+	int i, r0, bit;
+	s->getIntBit = BIT_UNKNOWN;
+	i = fcode_getInteger(s, len3table0);
+	bit = s->getIntBit;
+	if (bit == BIT_UNKNOWN)
+		bit = 32;
+	r0 = fcode_getReg(s, 0, 0);
+	if (s->getIntTyp == 0)
+		fcode_putLimm(s, bit, r0, i);
+	else {
+		fcode_putCp(s, bit, r0, i);
+		fcode_updateRep(s, 0, i);
+	}
+	fcode_updateRep(s, 0, r0);
+	return;
+}
+
 void fcode_ope3(DecodeFcodeStr *s)
 {
 	Int32 i = fcode_getSigned(s); // 先へ行く方が優遇される. 戻る系はforで支援しているので.
@@ -658,6 +684,8 @@ void fcode_ope3(DecodeFcodeStr *s)
 		fprintf(stderr, "fcode_ope3: Internal error.\n");
 		exit(1);
 	}
+	if (i > 0)
+		s->waitLb0 = 1;
 	i |= 0x80000000; // 後で補正するためにマークする.
 	i &= 0x80ffffff; // 相対補正.
 	fcode_putPlimm(s, p, i);
@@ -840,15 +868,19 @@ void fcode_opeCmp(DecodeFcodeStr *s, int opecode)
 		bit0 = s->getRegBit;
 	}
 	fcode_putCmp(s, opecode | 0x80, bit0, bit1, r0, r1, i);
+	fcode_updateRep(s, 0, r1);
+	if (i  != 0x3f) fcode_updateRep(s, 0, i);
+	if (r0 != 0x3f) fcode_updateRep(s, 0, r0);
 	if (s->flagD == 0) {
 		i = 1;
 		if (s->flag4 != 0)
 			i = fcode_getSigned(s);
+		if (i > 0)
+			s->waitLb0 = 1;
 		i |= 0x80000000; // 後で補正するためにマークする.
 		i &= 0x80ffffff; // 相対補正.
 		fcode_putCnd(s, 0x3f);
 		fcode_putPlimm(s, 0x3f, i);
-		s->waitLb0 = 1;
 	}
 	s->flag4 = s->flagD = 0;
 	return;
@@ -975,6 +1007,17 @@ void fcode_api0005(DecodeFcodeStr *s)
 		fcode_putCp(s, 16, 0x36, 0x04); // y0.
 		s->flag4 = 0;
 	}
+	fcode_putPcallP2f(s);
+	return;
+}
+
+void fcode_api0009(DecodeFcodeStr *s)
+// api_sleep(opt, msec).
+{
+	fcode_putRemark1(s);
+	fcode_putLimm(s, 16, 0x30, 0x0009);
+	fcode_putLimmOrCp(s, 16, 0x31); // opt.
+	fcode_putLimmOrCp(s, 32, 0x32); // msec.
 	fcode_putPcallP2f(s);
 	return;
 }
@@ -1135,6 +1178,7 @@ int fcode_fixLabelRelative(DecodeFcodeStr *s, int i, int imm, int min)
 		i--;
 	}
 	if (i < 0) {
+		imm--;
 		for (i = 0; i < DEFINES_MAXLABELS; i++) {
 			if (min <= s->label[i].opt && s->label[i].opt <= 1) {
 				if (min == 1) break;

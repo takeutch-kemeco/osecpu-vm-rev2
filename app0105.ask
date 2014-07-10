@@ -7,8 +7,8 @@
 		xsiz = 144 - i;
 		xsiz *= 2;
 	//	ysiz = xsiz;
-        y0 = (240 - 144) + i;
         x0 = (320 - 144) + i;
+        y0 = (240 - 144) + i;
         api_fillOval(MODE_COL24, col, xsiz, ysiz, x0, y0);
 		api_sleep(0, 100);
     }

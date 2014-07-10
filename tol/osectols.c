@@ -11,7 +11,7 @@ typedef unsigned char UCHAR;
 #define	BUFSIZE		2 * 1024 * 1024
 #define	JBUFSIZE	64 * 1024
 
-#define MAXLABEL	4096
+#define MAXLABELS	4096
 #define MAXIDENTS	4096
 
 struct Element {
@@ -176,7 +176,7 @@ int main(int argc, const UCHAR **argv)
 			 "  lbstk  ver.0.04\n"//117
 			 "  db2bin ver.0.19\n"//118
 			 "  disasm ver.0.02\n"
-			 "  appack ver.0.20\n"//110
+			 "  appack ver.0.21\n"//119
 			 "  maklib ver.0.01\n"
 			 "  getint ver.0.06\n"
 			 "  osastr ver.0.00\n"
@@ -940,6 +940,54 @@ int getConstInt1(const UCHAR **pp)
 {
 	char errflg = 0;
 	return getConstInt(pp, &errflg, 1 << 8);
+}
+
+char cmpBytes(const UCHAR *p, const char *t)
+{
+	char retCode = 0, c;
+	const char *t0 = t;
+	while (*t != '\0') {
+		if (*t == '_' || *t == ' ' || *t == '.') {
+			t++;
+			continue;
+		}
+		if (*t == '#') {
+			p += t[1] - '0';
+			t += 2;
+			continue;
+		}
+		if (('0' <= *t && *t <= '9') || ('a' <= *t && *t <= 'f') || *t == 'x') {
+			if (!(('0' <= t[1] && t[1] <= '9') || ('a' <= t[1] && t[1] <= 'f') || t[1] == 'x')) {
+				fprintf(stderr, "cmpBytes: error: \"%s\"\n", t0);
+				exit(1);
+			}
+			if (*t != 'x') {
+				c = *t - '0';
+				if (*t >= 'a')
+					c = *t - ('a' - 10);
+				if (((*p >> 4) & 0xf) != c) break;
+			}
+			t++;
+			if (*t != 'x') {
+				c = *t - '0';
+				if (*t >= 'a')
+					c = *t - ('a' - 10);
+				if ((*p & 0xf) != c) break;
+			}
+			t++;
+			p++;
+			continue;
+		}
+		if (*t == 'Y' && t[1] == 'x') {
+			if (*p < 0x80 || 0xbf < *p) break;
+			t += 2;
+			p++;
+			continue;
+		}
+	}
+	if (*t == '\0')
+		retCode = 1;
+	return retCode;
 }
 
 /*** aska ***/
@@ -2887,18 +2935,64 @@ int db2binSub2Len(const UCHAR *src)
 
 UCHAR *db2binSub2(UCHAR *p0, UCHAR *p1)
 {
-	int t[MAXLABEL], i, j;
+	int t[MAXLABELS], i, j;
 	UCHAR *p, *q, *r;
-	for (j = 0; j < MAXLABEL; j++)
+
+	// (1) ラベルマージ.
+
+	for (j = 0; j < MAXLABELS; j++)
+		t[j] = -1;
+
+	for (p = p0; p < p1; ) {
+		if (*p == 0xf1) {
+			j = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
+			if (j >= MAXLABELS || j < 0) {
+err:
+				fputs("label number over error. check LMEM/SMEM/PLMEM/PSMEM.\n", stderr);
+				exit(1);
+			}
+			t[j] = j;
+			q = p + db2binSub2Len(p);
+			while (q < p1 && cmpBytes(q, "fcfd_f788#480") != 0)
+				q += db2binSub2Len(q);
+			if (q < p1 && *q == 0xf1 && p[9] == q[9] && p[10] == q[10] && p[11] == q[11] && p[12] == q[12]) {
+				i = q[3] << 24 | q[4] << 16 | q[5] << 8 | q[6];
+				t[j] = i;
+			}
+		}
+		p += db2binSub2Len(p);
+	}
+
+	for (p = p0; p < p1; ) {
+		if (*p == 0xf3) {
+			j = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
+			if (j >= MAXLABELS || j < 0) goto err;
+			if (t[j] < 0) {
+				fputs("use undefined label number error. check LMEM/SMEM/PLMEM/PSMEM.\n", stderr);
+				exit(1);
+			}
+			if (t[j] != j) {
+//printf("%d->", j);
+				while (t[j] != j)
+					j = t[j];
+//printf("%d\n", j);
+				p[3] = (j >> 24) & 0xff;
+				p[4] = (j >> 16) & 0xff;
+				p[5] = (j >>  8) & 0xff;
+				p[6] =  j        & 0xff;
+			}
+		}
+		p += db2binSub2Len(p);
+	}
+
+	// (2) 不要ラベルの消去.
+
+	for (j = 0; j < MAXLABELS; j++)
 		t[j] = -1;
 
 	for (p = p0; p < p1; ) {
 		if (*p == 0xf1 || *p == 0xf3) {
 			j = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
-			if (j >= MAXLABEL || j < 0) {
-				fputs("label number over error. check LMEM/SMEM/PLMEM/PSMEM.\n", stderr);
-				exit(1);
-			}
 			if (*p == 0xf3)
 				t[j]--; // このラベルは参照されているので消さない.
 			if (*p == 0xf1 && p[12] != 0x00) // bugfix: hinted by yao, 2013.09.17. thanks!
@@ -3193,11 +3287,11 @@ UCHAR *db2binSub3(UCHAR *p0, UCHAR *p1, UCHAR *p2)
 				fprintf(stderr, "db2binSub3: unknown srcMode=0x%02x\n", srcMode);
 				exit(1);
 			}
-		} else if (p[0] == 0x9e && p[1] == 0xaf && p[2] == 0xbf && p[3] == 0xf1 && p[4] == 0xf7 && p[10] == 0xf7) {
-			for (i = 0; i < 16; i++)
+		} else if (cmpBytes(p, "f3_f788#4_b0 9e_af_bf f1_f788#4_f78800000002 fcfe00") != 0) {	// 8+3+13+3=27
+			for (i = 0; i < 27; i++)
 				p0[i] = p[i];
-			p0 += 16;
-			p += 16;
+			p0 += 27;
+			p += 27;
 			while (sp >= 0) {
 				p0 = db2binSub3_LIMM(p0, p, 32, 0x3a, tfreeBufLen[sp]);
 				p0 = db2binSub3_LIMM(p0, p, 32, 0x3b, tfreeBufTyp[sp]);
@@ -3338,171 +3432,6 @@ int disasm(struct Work *w)
 	if (w->flags == 1) r = disasm1(w);
 }
 
-void appackSub0(UCHAR **qq, char *pof, int i)
-// 4bit出力.
-{
-	UCHAR *q = *qq;
-	if (*pof == 0) {
-		*q &= ~0xf0;
-		*q++ |= (i << 4) & 0xf0;
-		*qq = q;
-	} else {
-		q[-1] &= ~0x0f;
-		q[-1] |= i & 0x0f;
-	}
-	*pof ^= 1;
-	return;
-}
-
-void appackSub1(UCHAR **qq, char *pof, int i, char uf)
-{
-	if (uf != 0) {
-		if (i <= 0x6)
-			appackSub0(qq, pof, i);
-		if (0x7 <= i && i <= 0x3f) {
-			appackSub0(qq, pof, i >> 4 | 0x8);
-			appackSub0(qq, pof, i);
-		}
-		if (0x40 <= i && i <= 0x1ff) {
-			appackSub0(qq, pof, i >> 8 | 0xc);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		}
-		if (0x200 <= i && i <= 0xfff) {
-			appackSub0(qq, pof, 0xe);
-			appackSub0(qq, pof, i >> 8);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		}
-		if (0x1000 <= i && i <= 0xffff) {
-			appackSub0(qq, pof, 0x7);
-			appackSub0(qq, pof, 0x4);
-			appackSub0(qq, pof, i >> 12);
-			appackSub0(qq, pof, i >> 8);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		}
-		if (0x10000 <= i && i <= 0xfffff) {
-			appackSub0(qq, pof, 0x7);
-			appackSub0(qq, pof, 0x5);
-			appackSub0(qq, pof, i >> 16);
-			appackSub0(qq, pof, i >> 12);
-			appackSub0(qq, pof, i >> 8);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		}
-		if (0x100000 <= i && i <= 0xffffff) {
-			appackSub0(qq, pof, 0x7);
-			appackSub0(qq, pof, 0x6);
-			appackSub0(qq, pof, i >> 20);
-			appackSub0(qq, pof, i >> 16);
-			appackSub0(qq, pof, i >> 12);
-			appackSub0(qq, pof, i >> 8);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		}
-		if (0x1000000 <= i && i <= 0xfffffff) {
-			appackSub0(qq, pof, 0x7);
-			appackSub0(qq, pof, 0x8);
-			appackSub0(qq, pof, 0x7);
-			appackSub0(qq, pof, i >> 24);
-			appackSub0(qq, pof, i >> 20);
-			appackSub0(qq, pof, i >> 16);
-			appackSub0(qq, pof, i >> 12);
-			appackSub0(qq, pof, i >> 8);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		}
-		if (0x10000000 <= i) {
-			appackSub0(qq, pof, 0x7);
-			appackSub0(qq, pof, 0x8);
-			appackSub0(qq, pof, 0x8);
-			appackSub0(qq, pof, i >> 28);
-			appackSub0(qq, pof, i >> 24);
-			appackSub0(qq, pof, i >> 20);
-			appackSub0(qq, pof, i >> 16);
-			appackSub0(qq, pof, i >> 12);
-			appackSub0(qq, pof, i >> 8);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		}
-	} else {
-#if (REVISION == 1)
-		if (-0x3 <= i && i <= 0x3) {
-			// -3, -2, -1, 0, 1, 2, 3
-#elif (REVISION == 2)
-		if (-0x1 <= i && i <= 0x5) {
-			// 4, 5, -1, 0, 1, 2, 3
-#endif
-			if (i < 0) i--;
-			i &= 0x7;
-			appackSub0(qq, pof, i);
-		} else if (-0x20 <= i && i <= 0x1f) {
-			i &= 0x3f;
-			appackSub0(qq, pof, i >> 4 | 0x8);
-			appackSub0(qq, pof, i);
-		} else if (-0x100 <= i && i <= 0xff) {
-			i &= 0x1ff;
-			appackSub0(qq, pof, i >> 8 | 0xc);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		} else if (-0x800 <= i && i <= 0x7ff) {
-			appackSub0(qq, pof, 0xe);
-			appackSub0(qq, pof, i >> 8);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		} else if (-0x8000 <= i && i <= 0x7fff) {
-			appackSub0(qq, pof, 0x7);
-			appackSub0(qq, pof, 0x4);
-			appackSub0(qq, pof, i >> 12);
-			appackSub0(qq, pof, i >> 8);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		} else if (-0x80000 <= i && i <= 0x7ffff) {
-			appackSub0(qq, pof, 0x7);
-			appackSub0(qq, pof, 0x5);
-			appackSub0(qq, pof, i >> 16);
-			appackSub0(qq, pof, i >> 12);
-			appackSub0(qq, pof, i >> 8);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		} else if (-0x800000 <= i && i <= 0x7fffff) {
-			appackSub0(qq, pof, 0x7);
-			appackSub0(qq, pof, 0x6);
-			appackSub0(qq, pof, i >> 20);
-			appackSub0(qq, pof, i >> 16);
-			appackSub0(qq, pof, i >> 12);
-			appackSub0(qq, pof, i >> 8);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		} else if (-0x8000000 <= i && i <= 0x7ffffff) {
-			appackSub0(qq, pof, 0x7);
-			appackSub0(qq, pof, 0x8);
-			appackSub0(qq, pof, 0x7);
-			appackSub0(qq, pof, i >> 24);
-			appackSub0(qq, pof, i >> 20);
-			appackSub0(qq, pof, i >> 16);
-			appackSub0(qq, pof, i >> 12);
-			appackSub0(qq, pof, i >> 8);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		} else {
-			appackSub0(qq, pof, 0x7);
-			appackSub0(qq, pof, 0x8);
-			appackSub0(qq, pof, 0x8);
-			appackSub0(qq, pof, i >> 28);
-			appackSub0(qq, pof, i >> 24);
-			appackSub0(qq, pof, i >> 20);
-			appackSub0(qq, pof, i >> 16);
-			appackSub0(qq, pof, i >> 12);
-			appackSub0(qq, pof, i >> 8);
-			appackSub0(qq, pof, i >> 4);
-			appackSub0(qq, pof, i);
-		}
-	}
-	return;
-}
-
 int appackEncodeConst(int i)
 {
 	if (i <= -0x11) i -= 0x50; /* -0x61以下へ */
@@ -3511,6 +3440,8 @@ int appackEncodeConst(int i)
 	}
 	return i;
 }
+
+#if 0
 
 char fe0501a(const UCHAR *p, int lastLabel, char mod, int p3f)
 {
@@ -3761,106 +3692,997 @@ const UCHAR *fe0501cc(int c0, int c1, const UCHAR *p)
 	return p;
 }
 
+#endif
+
 #define TYP_CODE		0
 #define TYP_UNKNOWN		-1
 
-void appackSub1op(UCHAR **qq, char *pof, int i, int *hist, UCHAR *opTbl)
-{
-	if (i < 256)
-		i = opTbl[i];
-	appackSub1(qq, pof, i, 1);
-	if (i < 0x40)
-		hist[i]++;
-	return;
-}
+typedef int Int32;
+
+typedef struct _Appack0Label {
+	signed char opt;
+	int typ, abs;
+} Appack0Label;
 
 typedef struct _AppackWork {
-	const unsigned char *p;
+//	const unsigned char *p;
 	unsigned char *q;
-	char pHalf;
-	int rep0, rep1, rep0p, rep1p, rep0f, rep1f;
-	int pxxTyp[64], labelTyp[MAXLABEL];
+	char qHalf;
+	int rep[3][8], immR3f;
+	int wait1, wait7, wait3d;
+	int pxxTyp[64];
 	int hist[0x40];
 	unsigned char opTbl[256];
-} AppackWork;
+	Appack0Label label[MAXLABELS];
+	int lastLabel;
 
-void appack_setRep(AppackWork *aw, int reg, int typ)
-{
-	if (typ == 0) {
-		aw->rep1 = aw->rep0;
-		aw->rep0 = reg;
-	}
-	if (typ == 1) {
-		aw->rep1p = aw->rep0p;
-		aw->rep0p = reg;
-	}
-	if (typ == 2) {
-		aw->rep1f = aw->rep0f;
-		aw->rep0f = reg;
-	}
-	return;
-}
+	// for param.
+	Int32 prm_r[0x40], prm_p[0x40], prm_f[0x40];
+	double prm_fd[0x40];
+
+	// for simple=0.
+	int v_xsiz, v_ysiz;
+} AppackWork;
 
 void appack_initWork(AppackWork *aw)
 {
-	int i;
+	int i, j;
 	for (i = 0; i < 0x40; i++)
 		aw->pxxTyp[i] = TYP_UNKNOWN;
-	for (i = 0; i < MAXLABEL; i++)
-		aw->labelTyp[i] = TYP_UNKNOWN;
 	for (i = 0; i < 0x40; i++)
 		aw->hist[i] = 0;
 	for (i = 0; i < 256; i++)
 		aw->opTbl[i] = i;
+	for (i = 0; i < 3; i++) {
+		for (j = 0; j < 8; j++)
+			aw->rep[i][j] = 0x30 + j;
+	}
+	aw->opTbl[0x14] = 0x00;
+	aw->opTbl[0x00] = 0x14;
+	aw->immR3f = 0;
+	aw->wait1 = -1;
+	aw->wait7 = 0;
+	aw->wait3d = 0;
+	aw->v_xsiz = 640;
+	aw->v_ysiz = 480;
+	aw->lastLabel = -1;
 	return;
 }
 
-void appack_initLabelTyp(struct Work *w, AppackWork *aw)
+void appackSub0(AppackWork *aw, int i)
+// 4bit出力.
 {
-	int i;
-	const unsigned char *p, *pp;
-	for (p = w->ibuf + DB2BIN_HEADER_LENGTH; p < w->ibuf + w->isiz; ) {
-		if (*p == 0xf1) {
-			i = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
-			aw->labelTyp[i] = TYP_CODE;
-			pp = p;
-			for (;;) {
-				if (pp >= w->ibuf + w->isiz) break;
-				if (*pp != 0xf1) break;
-				pp += db2binSub2Len(pp);
-			}
-			if (pp < w->ibuf + w->isiz && *pp == 0xae) {
-				aw->labelTyp[i] = pp[3] << 24 | pp[4] << 16 | pp[5] << 8 | pp[6];
-				if (aw->pxxTyp[4] == TYP_UNKNOWN) {
-					if (aw->pxxTyp[1] == TYP_UNKNOWN)
-						aw->pxxTyp[1] = aw->labelTyp[i];
-					else if (aw->pxxTyp[2] == TYP_UNKNOWN)
-						aw->pxxTyp[2] = aw->labelTyp[i];
-					else if (aw->pxxTyp[3] == TYP_UNKNOWN)
-						aw->pxxTyp[3] = aw->labelTyp[i];
-					else /* if (pxxTyp[4] == TYP_UNKNOWN) */
-						aw->pxxTyp[4] = aw->labelTyp[i];
-				}
-			}
-		}
-		p += db2binSub2Len(p);
+	UCHAR *q = aw->q;
+	if (aw->qHalf == 0) {
+		*q++ = (i << 4) & 0xf0;
+		aw->q = q;
+	} else {
+		q[-1] &= ~0x0f;
+		q[-1] |= i & 0x0f;
+	}
+	aw->qHalf ^= 1;
+	return;
+}
+
+void appackSub1u(AppackWork *aw, int i)
+{
+	if (i <= 0x6)
+		appackSub0(aw, i);
+	if (0x7 <= i && i <= 0x3f) {
+		appackSub0(aw, i >> 4 | 0x8);
+		goto bit4;
+	}
+	if (0x40 <= i && i <= 0x1ff) {
+		appackSub0(aw, i >> 8 | 0xc);
+		goto bit8;
+	}
+	if (0x200 <= i && i <= 0xfff) {
+		appackSub0(aw, 0xe);
+		goto bit12;
+	}
+	if (0x1000 <= i && i <= 0xffff) {
+		appackSub0(aw, 0x7);
+		appackSub0(aw, 0x4);
+		goto bit16;
+	}
+	if (0x10000 <= i && i <= 0xfffff) {
+		appackSub0(aw, 0x7);
+		appackSub0(aw, 0x5);
+		goto bit20;
+	}
+	if (0x100000 <= i && i <= 0xffffff) {
+		appackSub0(aw, 0x7);
+		appackSub0(aw, 0x6);
+		goto bit24;
+	}
+	if (0x1000000 <= i && i <= 0xfffffff) {
+		appackSub0(aw, 0x7);
+		appackSub0(aw, 0x8);
+		appackSub0(aw, 0x7);
+		goto bit28;
+	}
+	if (0x10000000 <= i) {
+		appackSub0(aw, 0x7);
+		appackSub0(aw, 0x8);
+		appackSub0(aw, 0x8);
+		appackSub0(aw, i >> 28);
+bit28:
+		appackSub0(aw, i >> 24);
+bit24:
+		appackSub0(aw, i >> 20);
+bit20:
+		appackSub0(aw, i >> 16);
+bit16:
+		appackSub0(aw, i >> 12);
+bit12:
+		appackSub0(aw, i >> 8);
+bit8:
+		appackSub0(aw, i >> 4);
+bit4:
+		appackSub0(aw, i);
 	}
 	return;
 }
 
-int appack0(struct Work *w)
+void appackSub1s(AppackWork *aw, int i, char f)
+// 定数専用, { 0, 1, 2, 3, 4, 5, -1 }
 {
-	const UCHAR *p = w->ibuf, *pp;
+	if (f == 0) {
+		if (i == -1) {
+			appackSub0(aw, 0x6);
+			goto fin;
+		}
+		if (0 <= i && i <= 0x5) {
+			appackSub0(aw, i);
+			goto fin;
+		}
+	}
+	if (-0x20 <= i && i <= 0x1f) {
+		i &= 0x3f;
+		appackSub0(aw, i >> 4 | 0x8);
+		goto bit4;
+	}
+	if (-0x100 <= i && i <= 0x0ff) {
+		i &= 0x1ff;
+		appackSub0(aw, i >> 8 | 0xc);
+		goto bit8;
+	}
+	if (-0x800 <= i && i <= 0x7ff) {
+		i &= 0xfff;
+		appackSub0(aw, 0xe);
+		goto bit12;
+	}
+	if (-0x8000 <= i && i <= 0x7fff) {
+		i &= 0xffff;
+		appackSub0(aw, 0x7);
+		appackSub0(aw, 0x4);
+		goto bit16;
+	}
+	if (-0x80000 <= i && i <= 0x7ffff) {
+		i &= 0xfffff;
+		appackSub0(aw, 0x7);
+		appackSub0(aw, 0x5);
+		goto bit20;
+	}
+	if (-0x800000 <= i && i <= 0x7fffff) {
+		i &= 0xffffff;
+		appackSub0(aw, 0x7);
+		appackSub0(aw, 0x6);
+		goto bit24;
+	}
+	if (-0x8000000 <= i && i <= 0x7ffffff) {
+		i &= 0xfffffff;
+		appackSub0(aw, 0x7);
+		appackSub0(aw, 0x8);
+		appackSub0(aw, 0x7);
+		goto bit28;
+	}
+
+	appackSub0(aw, 0x7);
+	appackSub0(aw, 0x8);
+	appackSub0(aw, 0x8);
+	appackSub0(aw, i >> 28);
+bit28:
+	appackSub0(aw, i >> 24);
+bit24:
+	appackSub0(aw, i >> 20);
+bit20:
+	appackSub0(aw, i >> 16);
+bit16:
+	appackSub0(aw, i >> 12);
+bit12:
+	appackSub0(aw, i >> 8);
+bit8:
+	appackSub0(aw, i >> 4);
+bit4:
+	appackSub0(aw, i);
+
+//	goto fin;
+
+//	fprintf(stderr, "appackSub1s: error: i=0x%x\n", i);
+//	exit(1);
+fin:
+	return;
+}
+
+static int len3table0[7] = { -1, 0, 1, 2, 3, 4, -0x10 /* rep0 */ };
+
+void appackSub1i(AppackWork *aw, int i, int *t)
+// 定数および整数レジスタ, リピートもあり.
+// fcode_getIntegerに対応している.
+{
+	int j;
+	if ((i & 0xffffffc0) == 0x80520000) {
+		i &= 0x3f;
+		for (j = 0; j < 8; j++) {
+			if (aw->rep[0][j] == i) break;
+		}
+		if (j < 8)
+			i = j | (-0x10);
+		else {
+			if (i == 0x3f) i = -0x11;
+			if (0x00 <= i && i <= 0x0e) i |= -0x20; // -0x20 ... -0x12
+			if (i == 0x0f) i = -0x21;
+			if (0x10 <= i && i <= 0x3e) i -= 0x60; // -0x50 ... -0x22
+		}
+	} else {
+		if (i <= -5) i -= 0x71 - 5; // 特殊変換のためにずらす.
+		if (i ==  0x20) i = -0x08;
+		if (i ==  0x40) i = -0x07;
+		if (i ==  0x80) i = -0x06;
+		if (i == 0x100) i = -0x05;
+		for (j = 0; j <= 22; j++) {
+			if (i == (1 << (j + 9)))
+				i = j + (-0x68);	// -0x68 ... -0x52 (-0x51は1<<32)
+		}
+	}
+	for (j = 0; j < 7; j++) {
+		if (t[j] == i) break;
+	}
+	if (j < 7)
+		appackSub1s(aw, j - 1, 0);
+	else
+		appackSub1s(aw, i, 1);
+	return;
+}
+
+void appackSub1r(AppackWork *aw, int i, char mode)
+// 整数レジスタのみ, リピートもあり.
+// fcode_getRegに対応している.
+{
+	int j;
+	if (mode == 1 && i <= 6) {
+		appackSub0(aw, i);
+		goto fin;
+	}
+	for (j = 0; j < 8; j++) {
+		if (aw->rep[0][j] == i) break;
+	}
+	if (j >= 2 && i <= 4)
+		j = 8;
+	if (j < 8) {
+		if (j <= 1 && mode == 0)
+			appackSub0(aw, 0x5 + j);
+		else {
+			appackSub0(aw, 0x9);
+			appackSub0(aw, 0x8 + j);
+		}
+	} else {
+		if (i <= 4 && mode == 0)
+			appackSub0(aw, i);
+		else if (i <= 0x17) {
+			appackSub0(aw, 0x8 | i >> 4);
+			appackSub0(aw, i & 0xf);
+		} else if (i <= 0x20) { // R18-R1F
+			appackSub0(aw, 0xc);
+			appackSub0(aw, 0x4);
+			appackSub0(aw, i & 0x7);
+		} else {	// R20-R3F
+			appackSub0(aw, 0x8 | i >> 4);
+			appackSub0(aw, i & 0xf);
+		}
+	}
+fin:
+	return;
+}
+
+void appackSub1p(AppackWork *aw, int i)
+// ポインタレジスタのみ, リピートもあり.
+// fcode_getRegに対応している.
+{
+	int j;
+	for (j = 0; j < 8; j++) {
+		if (aw->rep[1][j] == i) break;
+	}
+	if (j >= 2 && i <= 4)
+		j = 8;
+	if (j < 8) {
+		if (j <= 1)
+			appackSub0(aw, 0x5 + j);
+		else {
+			appackSub0(aw, 0x9);
+			appackSub0(aw, 0x8 + j);
+		}
+	} else {
+		if (i <= 4)
+			appackSub0(aw, i);
+		else if (i <= 0x17) {
+			appackSub0(aw, 0x8 | i >> 4);
+			appackSub0(aw, i & 0xf);
+		} else if (i <= 0x20) { // P18-P1F
+			appackSub0(aw, 0xc);
+			appackSub0(aw, 0x4);
+			appackSub0(aw, i & 0x7);
+		} else {	// P20-P3F
+			appackSub0(aw, 0x8 | i >> 4);
+			appackSub0(aw, i & 0xf);
+		}
+	}
+	return;
+}
+
+void appackSub1op(AppackWork *aw, int i)
+{
+	if (i < 256)
+		i = aw->opTbl[i];
+	appackSub1u(aw, i);
+	if (i < 0x40)
+		aw->hist[i]++;
+	return;
+}
+
+void appack_updateRep(AppackWork *aw, int typ, int r)
+{
+	int tmp0 = r, tmp1, i;
+	for (i = 0; i < 8; i++) {
+		tmp1 = aw->rep[typ][i];
+		aw->rep[typ][i] = tmp0;
+		if (tmp1 == r) break;
+		tmp0 = tmp1;
+	}
+	return;
+}
+
+void appack_initLabel(struct Work *w, AppackWork *aw)
+{
+	int i, j, k, buf[16], bp = 0;
+	const unsigned char *p, *pp;
+
+	for (i = 0; i < MAXLABELS; i++) {
+		aw->label[i].opt = -1;	// undefined
+		aw->label[i].typ = TYP_UNKNOWN;
+		aw->label[i].abs = -1;
+	}
+
+	for (p = w->ibuf + DB2BIN_HEADER_LENGTH; p < w->ibuf + w->isiz; ) {
+		if (cmpBytes(p, "f1_f788#4_f788") != 0) {
+			i = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
+			if (aw->label[i].opt >= 0) {
+				fputs("appack_initLabel: label redefined.\n", stderr);
+				exit(1);
+			}
+			aw->label[i].opt = p[9] << 24 | p[10] << 16 | p[11] << 8 | p[12];
+			aw->label[i].typ = TYP_CODE;
+			if (bp >= 16) {	// 16以上のLB命令の連続には対応できない.
+				fputs("appack_initLabel: internal error.\n", stderr);
+				exit(1);
+			}
+			buf[bp++] = i; // LB命令が連続したらバッファにためる.
+		}
+		if (cmpBytes(p, "ae_f788#4_f788") != 0) {
+			j = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
+			for (i = 0; i < bp; i++)
+				aw->label[buf[i]].typ = j;
+		}
+		if (*p != 0xf1)
+			bp = 0;
+		p += db2binSub2Len(p);
+	}
+
+	// opt=0,1について、abs[]を設定.
+	// todo: この計算方法はおかしい.
+	j = k = 0;
+	for (i = 0; i < MAXLABELS; i++) {
+		if (aw->label[i].opt == 0) aw->label[i].abs = j++;
+		if (aw->label[i].opt == 1) aw->label[i].abs = k++;
+	}
+
+	j = 1;
+	for (i = 0; i < MAXLABELS; i++) {
+		if (j > 4) break;
+		if (aw->label[i].opt != 1) continue;
+		if (aw->label[i].typ == TYP_CODE) continue;
+		aw->pxxTyp[j] = aw->label[i].typ;
+		j++;
+	}
+	return;
+}
+
+const UCHAR *appack0_param0(const UCHAR *p, AppackWork *aw)
+{
+	int i;
+	for (i = 0; i < 0x40; i++) {
+		aw->prm_r[i] = 0x8052003f;
+		aw->prm_p[i] = 0x8052003f;
+ 		aw->prm_f[i] = 0x8052003f;
+		aw->prm_fd[i] = 0.0;
+	}
+	for (;;) {
+		if (cmpBytes(p, "f2_f788#4_bx_f78800000020") != 0) {
+			// LIMM(R30-R3B).
+			i = p[7] & 0x3f;
+			if (i <= 0x3b) {
+				aw->prm_r[i] = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
+				p += 14;
+				continue;
+			}
+		}
+		if (cmpBytes(p, "90YxYxbx_f78800000020") != 0 && p[1] == p[2]) {
+			// CP(R30-R3B).
+			i = p[3] & 0x3f;
+			if (i <= 0x3b) {
+				aw->prm_r[i] = 0x80520000 | (p[1] & 0x3f);
+				p += 10;
+				continue;
+			}
+		}
+		break;
+	}
+	if (cmpBytes(p, "f3_f788#4_b0 9e_af_bf f1_f788#4_f78800000002 fcfe00") == 0)	// 8+3+13+3=27
+		p = NULL;
+	else
+		p += 27;
+	return p;
+}
+
+char appack0_param1(AppackWork *aw, int n, int r0)
+{
+	char retCode = 0;
+	int i;
+	for (i = 0; i < n; i++) {
+		if (aw->prm_r[r0 + i] != (0x80520000 | i))
+			break;
+	}
+	if (i >= n)
+		retCode = 1;
+	return retCode;
+}
+
+void appack0_waitFlush(AppackWork *aw)
+{
+	if (aw->wait1 == 1) {
+		appackSub1op(aw, 0x01);
+		aw->wait1 = -1;
+	}
+	while (aw->wait7 > 0) {
+		appackSub1op(aw, 0x07);
+		aw->wait7--;
+	}
+	return;
+}
+
+int appackSub2a(AppackWork *aw, char mode, int *pofs)
+// 相対指定の原点を探す.
+{
+	*pofs = 0;
+	int i = aw->lastLabel;
+	if (mode == 0) {	// TYP_CODEで、opt=0-1.
+		for (;;) {
+			if (i < 0) break;
+			if (0 <= aw->label[i].opt && aw->label[i].opt <= 1 && aw->label[i].typ == TYP_CODE) break;
+			i--;
+		}
+		if (i < 0) {
+			*pofs = 1;
+			for (i = 0; i < MAXLABELS; i++) {
+				if (0 <= aw->label[i].opt && aw->label[i].opt <= 1 && aw->label[i].typ == TYP_CODE) break;
+			}
+		}
+	}
+	if (mode == 1) {	// opt=1のみ.
+		for (;;) {
+			if (i < 0) break;
+			if (aw->label[i].opt == 1) break;
+			i--;
+		}
+		if (i < 0) {
+			*pofs = 1;
+			for (i = 0; i < MAXLABELS; i++) {
+				if (aw->label[i].opt == 1) break;
+			}
+		}
+	}
+	if (i >= MAXLABELS) {
+		fprintf(stderr, "appackSub2a: error. lastLabel=%d, mode=%d\n", aw->lastLabel, mode);
+		exit(1);
+	}
+	return i;
+}
+
+int appackSub2b(AppackWork *aw, char mode, int j)
+{
+	int retCode;
+	int i = appackSub2a(aw, mode, &retCode);
+	if (i == j) goto fin;
+	if (mode == 0) {	// TYP_CODEで、opt=0-1.
+		if (!(0 <= aw->label[j].opt && aw->label[j].opt <= 1 && aw->label[j].typ == TYP_CODE)) {
+			fprintf(stderr, "appackSub2b: PLIMM type error. lastLabel=%d, mode=%d, j=%d\n", aw->lastLabel, mode, j);
+			exit(1);
+		}
+		if (i > j) {
+			while (i > j) {
+				i--;
+				retCode--;
+				for (;;) {
+					if (0 <= aw->label[i].opt && aw->label[i].opt <= 1 && aw->label[i].typ == TYP_CODE) break;
+					i--;
+				}
+			}
+		} else {
+			while (i < j) {
+				i++;
+				retCode++;
+				for (;;) {
+					if (0 <= aw->label[i].opt && aw->label[i].opt <= 1 && aw->label[i].typ == TYP_CODE) break;
+					i++;
+				}
+			}
+		}
+	}
+	if (mode == 1) {	// opt=1.
+		if (aw->label[j].opt != 1) {
+			fprintf(stderr, "appackSub2b: PLIMM opt error. lastLabel=%d, mode=%d, j=%d\n", aw->lastLabel, mode, j);
+			exit(1);
+		}
+		if (i > j) {
+			while (i > j) {
+				i--;
+				retCode--;
+				for (;;) {
+					if (aw->label[i].opt == 1) break;
+					i--;
+				}
+			}
+		} else {
+			while (i < j) {
+				i++;
+				retCode++;
+				for (;;) {
+					if (aw->label[i].opt == 1) break;
+					i++;
+				}
+			}
+		}
+	}
+fin:
+	return retCode;
+}
+
+#define R0	-0x10+0 /* rep0 */
+#define R1	-0x10+1 /* rep1 */
+
+int appack0(struct Work *w, char flags)
+{
+	const UCHAR *p = w->ibuf, *pp, *p1;
 	UCHAR *q = w->obuf, *qq;
-	*q++ = *p++;
-	*q++ = *p++;
-	char of = 0, f, oof, ff, fe0103 = 0;
-	int r3f = 0, lastLabel = -1, i, j, wait7 = 0, firstDataLabel = -1;
+//	int r3f = 0, lastLabel = -1, i, j, wait7 = 0, firstDataLabel = -1;
+	int i = 0, j, k, l;
 	AppackWork aw;
+	char simple = flags & 1, encLidr = flags & 2, flg4, flgD;
+	*q++ = *p++;
+	*q++ = *p++;
+	if (*p != 0x00) {
+		fprintf(stderr, "appack: input-file format error.\n");
+		exit(1);
+	}
+	p++;
 	qq = db2binSub2(w->ibuf + DB2BIN_HEADER_LENGTH, w->ibuf + w->isiz); // ラベル番号の付け直し.
 	w->isiz = qq - w->ibuf;
 	appack_initWork(&aw);
-	appack_initLabelTyp(w, &aw);
+	appack_initLabel(w, &aw);
+	p1 = w->ibuf + w->isiz;
+	aw.q = q;
+	aw.qHalf = 0;
+	while (p < p1) {
+		if (*p == 0xf0) {
+			p++;
+			continue;
+		}
+		if (cmpBytes(p,"f1_f788#4_f78800000001 ae_f788#4f788") != 0) {
+			appack0_waitFlush(&aw);
+			i = p[16] << 24 | p[17] << 16 | p[18] << 8 | p[19];
+			j = p[22] << 24 | p[23] << 16 | p[24] << 8 | p[25];
+			appackSub1op(&aw, 0x2e);
+			appackSub1u(&aw, i);
+			appackSub1u(&aw, j);
+			j *= db2binDataWidth(i);
+			j >>= 3; // j /= 8;
+			p += 26;
+			for (i = 0; i < j; i++) {
+				appackSub0(&aw, (*p >> 4) & 0x0f);
+				appackSub0(&aw,  *p       & 0x0f);
+				p++;
+			}
+			aw.lastLabel++;
+			continue;
+		}
+		if (cmpBytes(p,"f1_f788#4_f78800000000") != 0) {
+			appack0_waitFlush(&aw);
+			if (aw.wait1 == 0)
+				aw.wait1 = 1;
+			else
+				appackSub1op(&aw, 0x01);
+			aw.lastLabel++;
+			p += 13;
+			continue;
+		}
+		if (cmpBytes(p,"f2_f788#4_Yx_f78800000020") != 0) {
+			appack0_waitFlush(&aw);
+			i = p[7] & 0x3f;
+			j = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
+			if (i == 0x3f)
+				aw.immR3f = j;
+			else {
+				appackSub1op(&aw, 0x02);
+				appackSub1i(&aw, j, len3table0);
+				appackSub1r(&aw, i, 0);
+				appack_updateRep(&aw, 0, i);
+			}
+			p += 14;
+			continue;
+		}
+		if (cmpBytes(p,"f3_f788#4_Yx") != 0) {
+			appack0_waitFlush(&aw);
+			i = p[7] & 0x3f;
+			j = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
+			flg4 = 0;
+			if (i != 0x3f)
+				flg4 = 1;
+			if (flg4 != 0)
+				appackSub1op(&aw, 0x04);
+			appackSub1op(&aw, 0x03);
+			k = appackSub2b(&aw, flg4, j);
+			appackSub1s(&aw, k, 0);
+			if (flg4 != 0) {
+				appackSub1p(&aw, i);
+				appack_updateRep(&aw, 1, i);
+				aw.pxxTyp[i] = aw.label[j].typ;
+			} else {
+				if (k > 0)
+					aw.wait1 = 0;
+			}
+			p += 8;
+			continue;
+		}
+		if (cmpBytes(p, "88Yxf788#4f78800000000Yxf78800000020") != 0) {
+			appack0_waitFlush(&aw);
+			i = p[1]  & 0x3f;
+			j = p[14] & 0x3f;
+			k = p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7];
+			p += 21;
+			flgD = 0;
+			if (aw.pxxTyp[i] != k) {
+				flgD = 1;
+				aw.pxxTyp[i] = k;
+			}
+			flg4 = 1;
+			if (cmpBytes(p, "f2f78800000001bff78800000020 8eYxf788#4bff78800000020Yx") != 0 && p[1-21] == p[15] && p[15] == p[29]) {
+				flg4 = 0;
+				p += 30;
+			}
+			if (flg4 != 0)
+				appackSub1op(&aw, 0x04);
+			if (flgD != 0)
+				appackSub1op(&aw, 0x0d);
+			appackSub1op(&aw, 0x08);
+			appackSub1p(&aw, i);
+			if (flgD != 0)
+				appackSub1u(&aw, k);
+			appackSub1u(&aw, 0);
+			appackSub1r(&aw, j, 0);
+			appack_updateRep(&aw, 1, i);
+			appack_updateRep(&aw, 0, j);
+			continue;
+		}
+		if (cmpBytes(p, "90YxYxYx_f788") != 0 && p[2] == p[1]) {
+			// CP
+			appack0_waitFlush(&aw);
+			i = p[1] & 0x3f;
+			j = p[3] & 0x3f;
+			appackSub1op(&aw, 0x02);
+			appackSub1i(&aw, i | 0x80520000, len3table0);
+			appackSub1r(&aw, j, 0);
+			appack_updateRep(&aw, 0, j);
+			p += 10;
+			continue;
+		} 
+		if (cmpBytes(p,"YxYxYxYx_f788") != 0 && 0x90 <= *p && *p <= 0x9b && *p != 0x97) {
+			appack0_waitFlush(&aw);
+			static int len3table[12][7] = {
+			//	{ -1,  0,  1,  2,  3,  4, R0 }, // general
+				{ R1, 16,  1,  2,  8,  4, R0 }, // OR
+				{ -1, R1,  1,  2,  3,  4, R0 }, // XOR
+				{ R1, 15,  1,  7,  3,  5, R0 }, // AND
+				{ 64, 16,  1,  2,  8,  4, 32 }, // SBX
+				{ R1, R0,  1,  2,  3,  4,  5 }, // ADD
+				{ R1, R0,  1,  2,  3,  4,  5 }, // SUB
+				{ -1, R0, R1,  7,  3,  6,  5 }, // MUL
+				{  0,  0,  0,  0,  0,  0,  0 },
+				{ R1, R0,  1,  2,  3,  4,  5 }, // SHL
+				{ R1, R0,  1,  2,  3,  4,  5 }, // SAR
+				{  9, R0, R1,  7,  3,  6,  5 }, // DIV
+				{  9, R0, R1,  7,  3,  6,  5 }, // MOD
+			};
+			k = *p & 0x0f;
+			l = p[2];
+			if (simple == 0) {
+				if (cmpBytes(p, "98YxbfYx") != 0 && aw.immR3f == 1) {
+					for (i = 0; i < 8; i++) {
+						if (aw.rep[0][i] == (p[1] & 0x3f)) break;
+					}
+					if (i <= 1 || (0x80 <= p[1] && p[1] <= 0x84)) {
+						k = 0x04;	// SHL -> ADD
+						l = p[1];
+					}
+				}
+			}
+			if (p[1] == p[3]) {
+				i = p[1] & 0x3f;
+				j = aw.immR3f;
+				if (l != 0xbf)
+					j = 0x80520000 | (l & 0x3f);
+				appackSub1op(&aw, k | 0x10);
+				appackSub1r(&aw, i, 0);
+				appackSub1i(&aw, j, len3table[k]);
+			} else if (p[1] != 0xbf) {
+				i = p[3] & 0x3f;
+				j = aw.immR3f;
+				if (l != 0xbf)
+					j = 0x80520000 | (l & 0x3f);
+				appackSub1op(&aw, 0x04);
+				appackSub1op(&aw, k | 0x10);
+				appackSub1r(&aw, p[1] & 0x3f, 0);
+				appackSub1i(&aw, j, len3table[k]);
+				appackSub1r(&aw, i, 0);
+			} else {
+				i = p[3] & 0x3f;
+				j = aw.immR3f;
+				if (l == p[3]) {
+					appackSub1op(&aw, 0x0d);
+					appackSub1op(&aw, k | 0x10);
+					appackSub1r(&aw, i, 0);
+					appackSub1i(&aw, j, len3table[k]);
+				} else {
+					appackSub1op(&aw, 0x04);
+					appackSub1op(&aw, 0x0d);
+					appackSub1op(&aw, k | 0x10);
+					appackSub1r(&aw, l & 0x3f, 0);
+					appackSub1i(&aw, j, len3table[k]);
+					appackSub1r(&aw, i, 0);
+				}
+			}
+			if (p[1] != 0xbf) appack_updateRep(&aw, 0, p[1] & 0x3f);
+			if (l != 0xbf) appack_updateRep(&aw, 0, l & 0x3f);
+			appack_updateRep(&aw, 0, i);
+			p += 10;
+			continue;
+		}
+		if (cmpBytes(p,"YxYxYx_f78800000020_bf_f78800000020 f4_bf f3_f788#4_bf") != 0 && 0xa0 <= *p && *p <= 0xa7) {
+			appack0_waitFlush(&aw);
+			i = p[21] << 24 | p[22] << 16 | p[23] << 8 | p[24];
+			i = appackSub2b(&aw, 0, i);
+			if (i == 1) {
+				appackSub1op(&aw, *p & 0x3f);
+				appackSub1r(&aw, p[1] & 0x3f, 0);
+				if (p[2] == 0xbf)
+					appackSub1i(&aw, aw.immR3f, len3table0);
+				else
+					appackSub1i(&aw, 0x80520000 | (p[2] & 0x3f), len3table0);
+			} else {
+				appackSub1op(&aw, 0x04);
+				appackSub1op(&aw, *p & 0x3f);
+				appackSub1r(&aw, p[1] & 0x3f, 0);
+				if (p[2] == 0xbf)
+					appackSub1i(&aw, aw.immR3f, len3table0);
+				else
+					appackSub1i(&aw, 0x80520000 | (p[2] & 0x3f), len3table0);
+				appackSub1s(&aw, i, 0);
+			}
+			if (i > 0)
+				aw.wait1 = 0;
+			appack_updateRep(&aw, 0, p[1] & 0x3f);
+			if (p[2] != 0xbf)
+				appack_updateRep(&aw, 0, p[2] & 0x3f);
+			p += 26;
+			continue;
+		}
+		if (cmpBytes(p,"YxYxYx_f78800000020_Yx_f78800000020") != 0 && 0xa0 <= *p && *p <= 0xa7) {
+		}
+		if (cmpBytes(p,"fcfdf788#480") != 0) {
+			if (encLidr != 0) {
+				appack0_waitFlush(&aw);
+				appackSub1op(&aw, 0xfd);
+				appackSub1s(&aw, p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7], 0);
+				appackSub1u(&aw, 0);
+			}
+			p += 9;
+			continue;
+		}
+		if (cmpBytes(p,"fcfe10") != 0) {
+			// REM01() : API呼び出しマクロヘッダ.
+			appack0_waitFlush(&aw);
+			pp = appack0_param0(p + 3, &aw);
+			if (pp != NULL) {
+				if (aw.prm_r[0x30] == 0x0002) { // api_drawPoint
+					if (appack0_param1(&aw, 3, 0x32) != 0) {
+						appackSub1op(&aw, 0x04);
+						appackSub1op(&aw, 0x05);
+						appackSub1s(&aw, 0x0002, 0);
+						appackSub1i(&aw, aw.prm_r[0x31], len3table0); // mode
+						p = pp;
+						continue;
+					}
+					appackSub1op(&aw, 0x05);
+					appackSub1s(&aw, 0x0002, 0);
+					for (i = 0x31; i <= 0x34; i++)
+						appackSub1i(&aw, aw.prm_r[i], len3table0);
+					p = pp;
+					aw.lastLabel++;
+					continue;
+				}
+				if (aw.prm_r[0x30] == 0x0003) { // api_drawLine
+					if (appack0_param1(&aw, 5, 0x32) != 0) {
+						appackSub1op(&aw, 0x04);
+						appackSub1op(&aw, 0x05);
+						appackSub1s(&aw, 0x0003, 0);
+						appackSub1i(&aw, aw.prm_r[0x31], len3table0); // mode
+						p = pp;
+						aw.lastLabel++;
+						continue;
+					}
+					appackSub1op(&aw, 0x05);
+					appackSub1s(&aw, 0x0003, 0);
+					if (simple == 0) {
+						if ((aw.prm_r[0x31] & 3) == 0 && aw.prm_r[0x32] == 7) aw.prm_r[0x32] = -1;
+						if (aw.prm_r[0x33] == aw.v_xsiz - 1 && aw.v_xsiz > 0) aw.prm_r[0x33] = -1;
+						if (aw.prm_r[0x34] == aw.v_ysiz - 1 && aw.v_ysiz > 0) aw.prm_r[0x34] = -1;
+						if (aw.prm_r[0x35] == aw.v_xsiz - 1 && aw.v_xsiz > 0) aw.prm_r[0x35] = -1;
+						if (aw.prm_r[0x36] == aw.v_ysiz - 1 && aw.v_ysiz > 0) aw.prm_r[0x36] = -1;
+					}
+					for (i = 0x31; i <= 0x36; i++)
+						appackSub1i(&aw, aw.prm_r[i], len3table0);
+					p = pp;
+					aw.lastLabel++;
+					continue;
+				}
+				if (aw.prm_r[0x30] == 0x0004) { // api_fillRect
+					if (appack0_param1(&aw, 5, 0x32) != 0) {
+						appackSub1op(&aw, 0x04);
+						appackSub1op(&aw, 0x05);
+						appackSub1s(&aw, 0x0004, 0);
+						appackSub1i(&aw, aw.prm_r[0x31], len3table0); // mode
+						p = pp;
+						aw.lastLabel++;
+						continue;
+					}
+					appackSub1op(&aw, 0x05);
+					appackSub1s(&aw, 0x0004, 0);
+					if (simple == 0) {
+						if ((aw.prm_r[0x31] & 3) == 0 && aw.prm_r[0x32] == 7) aw.prm_r[0x32] = -1;
+						if (aw.prm_r[0x33] == aw.v_xsiz) aw.prm_r[0x33] = -1;
+						if (aw.prm_r[0x34] == aw.v_ysiz) aw.prm_r[0x34] = -1;
+						if (aw.prm_r[0x34] == aw.prm_r[0x33] && aw.prm_r[0x34] > 0)
+							aw.prm_r[0x34] = 0;
+					}
+					for (i = 0x31; i <= 0x36; i++)
+						appackSub1i(&aw, aw.prm_r[i], len3table0);
+					p = pp;
+					aw.lastLabel++;
+					continue;
+				}
+				if (aw.prm_r[0x30] == 0x0005) { // api_fillOval
+					if (appack0_param1(&aw, 5, 0x32) != 0) {
+						appackSub1op(&aw, 0x04);
+						appackSub1op(&aw, 0x05);
+						appackSub1s(&aw, 0x0005, 0);
+						appackSub1i(&aw, aw.prm_r[0x31], len3table0); // mode
+						p = pp;
+						aw.lastLabel++;
+						continue;
+					}
+					appackSub1op(&aw, 0x05);
+					appackSub1s(&aw, 0x0005, 0);
+					if (simple == 0) {
+						if ((aw.prm_r[0x31] & 3) == 0 && aw.prm_r[0x32] == 7) aw.prm_r[0x32] = -1;
+						if (aw.prm_r[0x33] == aw.v_xsiz) aw.prm_r[0x33] = -1;
+						if (aw.prm_r[0x34] == aw.v_ysiz) aw.prm_r[0x34] = -1;
+						if (aw.prm_r[0x34] == aw.prm_r[0x33] && aw.prm_r[0x34] > 0)
+							aw.prm_r[0x34] = 0;
+					}
+					for (i = 0x31; i <= 0x36; i++)
+						appackSub1i(&aw, aw.prm_r[i], len3table0);
+					p = pp;
+					aw.lastLabel++;
+					continue;
+				}
+				if (aw.prm_r[0x30] == 0x0009) { // api_sleep
+					appackSub1op(&aw, 0x05);
+					appackSub1s(&aw, 0x0009, 0);
+					appackSub1i(&aw, aw.prm_r[0x31], len3table0);
+					appackSub1i(&aw, aw.prm_r[0x32], len3table0);
+					p = pp;
+					aw.lastLabel++;
+					continue;
+				}
+				if (aw.prm_r[0x30] == 0x0010) { // api_openWin
+					appackSub1op(&aw, 0x05);
+					appackSub1s(&aw, 0x0010, 0);
+					if (aw.prm_r[0x31] > 0)
+						aw.v_xsiz = aw.prm_r[0x31];
+					else
+						aw.v_xsiz = -1;
+					if (aw.prm_r[0x32] > 0)
+						aw.v_ysiz = aw.prm_r[0x32];
+					else if (aw.prm_r[0x32] == 0 && aw.v_xsiz > 0)
+						aw.v_ysiz = aw.v_xsiz;
+					else
+						aw.v_ysiz = -1;
+					if (simple == 0) {
+						if (aw.prm_r[0x32] == aw.prm_r[0x31] && aw.prm_r[0x32] > 0)
+							aw.prm_r[0x32] = 0;
+					}
+					appackSub1i(&aw, aw.prm_r[0x31], len3table0);
+					appackSub1i(&aw, aw.prm_r[0x32], len3table0);
+					p = pp;
+					aw.lastLabel++;
+					continue;
+				}
+				fprintf(stderr, "appack0: fcfe10: error: R30=0x%04x\n", aw.prm_r[0x30]);
+				exit(1);
+			}
+		}
+		if (cmpBytes(p,"fcfe21_f788") != 0) {
+			// REM02() : for構文.
+			appack0_waitFlush(&aw);
+			aw.prm_r[0x31] = p[5] << 24 | p[6] << 16 | p[7] << 8 | p[8];
+			if (cmpBytes(p + 9,"f2_f788#4_Yx_f78800000020 f1_f788#4_f78800000000") != 0) {
+				i = p[16] & 0x3f;
+				aw.prm_r[0x30] = p[12] << 24 | p[13] << 16 | p[14] << 8 | p[15];
+				p += 36;
+			} else {
+				goto err;
+			}
+			if (aw.prm_r[0x30] != 0)
+				appackSub1op(&aw, 0x04);
+			appackSub1op(&aw, 0x06);
+			appackSub1r(&aw, i, 1);
+			if (aw.prm_r[0x30] != 0)
+				appackSub1i(&aw, aw.prm_r[0x30], len3table0);
+			appackSub1i(&aw, aw.prm_r[0x31], len3table0);
+			appack_updateRep(&aw, 0, i);
+			aw.lastLabel++;
+			continue;
+		}
+		if (cmpBytes(p,"fcfe30") != 0) {
+			// REM03() : next構文.
+			if (aw.wait3d > 0)
+				appack0_waitFlush(&aw);
+			while (*p != 0xf3)
+				p += db2binSub2Len(p);
+			p += db2binSub2Len(p);
+			aw.wait7++;
+			continue;
+		}
+err:
+		fprintf(stderr, "appack0: error: op=%02x-%02x-%02x-%02x\n", *p, p[1], p[2], p[3]);
+		exit(1);
+	}
+	while (aw.q[-1] == 0x00)
+		aw.q--;
+	return putBuf(w->argOut, w->obuf, aw.q);
+
+
+
 
 #if 0
 	*qq = '\0';
@@ -4387,6 +5209,9 @@ op_f0:
 	return putBuf(w->argOut, w->obuf, q);
 }
 
+#undef R0
+#undef R1
+
 int appackSub2(const UCHAR **pp, char *pif)
 {
 	int r = 0;
@@ -4612,6 +5437,7 @@ int appack2(struct Work *w, char level)
 		q = &w->obuf[3];
 		char of = 0;
 		pp = p;
+#if 0
 		for (;;) {
 			if (*p == 0x15)      { appackSub1(&q, &of, 1, 1); p++; }
 			else if (*p == 0x19) { appackSub1(&q, &of, 2, 1); p++; }
@@ -4624,6 +5450,7 @@ int appack2(struct Work *w, char level)
 			appackSub0(&q, &of, 0x08);
 			p = pp;
 		}
+#endif
 		*q++ = i & 0xff;
 		while (p < w->ibuf + w->isiz)
 			*q++ = *p++;
@@ -4639,10 +5466,13 @@ int appack2(struct Work *w, char level)
 int appack(struct Work *w)
 {
 	int r = 0, f = w->flags >> 2;
-	if (f == 0) r = appack0(w);
-	if (f == 1) r = appack1(w);
-	if (f == 2) r = appack2(w, 0);
-	if (f == 3) r = appack2(w, 1);
+	if (f == 0) r = appack0(w, 0);
+	if (f == 1) r = appack0(w, 2);	// encLidr=1
+	if (f == 2) r = appack0(w, 3);	// simple=1, encLidr=1
+
+//	if (f == 1) r = appack1(w);
+//	if (f == 2) r = appack2(w, 0);
+//	if (f == 3) r = appack2(w, 1);
 	return r;
 }
 

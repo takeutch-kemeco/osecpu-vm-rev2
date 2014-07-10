@@ -47,7 +47,7 @@
 #define api_drawStringHex_2(mod, c, xsiz, ysiz, x0, y0, s, reg0, width0, opt0, reg1, width1, opt1)	api_drawStringHex6_2(mod, c, xsiz, ysiz, x0, y0, s, reg0, width0, opt0, reg1, width1, opt1)
 
 #define api_malloc(_p, typ, len)					R3A=len; R3B=typ; DB(0xb2); r(R3B); bit(32); r(R3A); bit(32); DB((_p&0x3f)+0x80)
-#define api_malloc_initInt(_p, typ, len, v0)		R3A=len; R3B=typ; DB(0xb2); r(R3B); bit(32); r(R3A); bit(32); DB((_p&0x3f)+0x80); P3E=_p; R39=v0;for(R3B=0;R3B!=R3A;R3B++){SMEM0PP(32, R39, typ, P3E);}
+#define api_malloc_initInt(_p, typ, len, v0)		R3A=len; R3B=typ; DB(0xb2); r(R3B); bit(32); r(R3A); bit(32); DB((_p&0x3f)+0x80); P3B=_p; R39=v0;for(R3B=0;R3B!=R3A;R3B++){SMEM0PP(32, R39, typ, P3B);}
 
 #define API_REG		0x80520000
 

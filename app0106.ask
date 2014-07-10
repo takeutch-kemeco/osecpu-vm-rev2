@@ -6,13 +6,12 @@
     x = 32; y = 0; vx = 8; vy = 8;
     for (;;) {
         tx = x + vx; ty = y + vy;
-        if (tx < 0       ) { vx =  8; }
-        if (tx > 320 - 16) { vx = -8; }
-        if (ty < 0       ) { vy =  8; }
-        if (ty > 240 - 16) { vy = -8; }
+        if (tx < 0       ) { vx *= -1; }
+        if (tx > 320 - 16) { vx *= -1; }
+        if (ty < 0       ) { vy *= -1; }
+        if (ty > 240 - 16) { vy *= -1; }
         x += vx; y += vy;
         api_fillOval(MODE_COL3, 7, 16, 16, x, y); // ボールを描く.
         api_sleep(0, 100);
         api_fillRect(MODE_COL3, 0, 16, 16, x, y); // ボールを消す.
     }
-

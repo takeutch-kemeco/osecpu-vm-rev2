@@ -5,8 +5,6 @@
 LOCALLABELS(1);
 
 
-	Int32s col:R00, x0:R01, y0:R02, x1:R03, y1:R04, i:R05, j:R06;
-
 //	PLIMM(P01, L_POINT);
 
 DAT_SA(L_POINT, T_UINT8, 16 * 2);
@@ -15,6 +13,8 @@ DAT_SA(L_POINT, T_UINT8, 16 * 2);
 	DB( 53, 183,  90, 195, 129, 191, 164, 171, 187, 139);
 	DB(196, 100);
 DAT_END();
+
+	Int32s col:R00, x0:R01, y0:R02, x1:R03, y1:R04, i:R05, j:R06;
 
 	for (i = 0; i != 15; i++) {
 		LMEM0PP(32, R01, T_UINT8, P01); LMEM0PP(32, R02, T_UINT8, P01); // x0, y0.

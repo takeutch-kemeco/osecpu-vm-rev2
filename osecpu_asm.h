@@ -10,8 +10,8 @@
 
 #define	_								DI();
 #define	LB0(imm)						LB(0, imm); _
-#define	GLB(imm)						LB(1, imm); DBGINFO1(); 
-#define	ELB(imm)						LB(2, imm); DBGINFO1(); 
+#define	GLB(imm)						LB(1, imm); DBGINFO1(); _
+#define	ELB(imm)						LB(2, imm); DBGINFO1(); _
 
 #define PALMEM(reg0, typ32, preg0, reg1, mclen)	PADD(P3F, typ32, preg0, reg1); LMEM(reg0, typ32, P3F, mclen)
 #define PASMEM(reg0, typ32, preg0, reg1, mclen)	PADD(P3F, typ32, preg0, reg1); SMEM(reg0, typ32, P3F, mclen)

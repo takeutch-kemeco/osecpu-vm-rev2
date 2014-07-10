@@ -7,5 +7,4 @@
 @%OSECPU_EXTOLS%ext_tols\cc1.exe -quiet %2 %3 %4 %5 %6 %7 %8 %9 -E -P -o a_2cas.txt a_1oas_%1.txt
 @osectols.exe tool:lbstk in:a_2cas.txt out:a_3cas.txt lst:a_3lbl.txt
 @osectols.exe tool:db2bin in:a_3cas.txt out:%1.ose
-@rem osectols.exe tool:db2bin in:a_3cas.txt out:a_4ose.ose
-@rem osectols.exe tool:appack in:a_4ose.ose out:%1.ose flags:1
+@osectols.exe tool:appack in:%1.ose out:%1_.ose
