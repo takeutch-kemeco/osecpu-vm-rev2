@@ -54,6 +54,7 @@ int appack(struct Work *w);
 int maklib(struct Work *w);
 int fcode(struct Work *w);
 int b32(struct Work *w);
+int dumpbk(struct Work *w);
 
 #define PUT_USAGE				-999
 #define	FLAGS_PUT_MANY_INFO		1
@@ -106,6 +107,7 @@ int main(int argc, const UCHAR **argv)
 		if (strcmp(cs, "maklib") == 0) { r = maklib(w); }
 		if (strcmp(cs, "fcode")  == 0) { r = fcode(w);  }
 		if (strcmp(cs, "b32")    == 0) { r = b32(w);    }
+		if (strcmp(cs, "dumpbk") == 0) { r = dumpbk(w); }
 	}
 	if (cs != NULL && strcmp(cs, "getint") == 0) {
 		cs = searchArg(w, "exp:");
@@ -174,15 +176,16 @@ int main(int argc, const UCHAR **argv)
 			 "  aska   ver.0.20\n"//108
 			 "  prepro ver.0.01\n"
 			 "  lbstk  ver.0.04\n"//117
-			 "  db2bin ver.0.19\n"//118
+			 "  db2bin ver.0.20\n"//119
 			 "  disasm ver.0.02\n"
-			 "  appack ver.0.21\n"//119
+			 "  appack ver.0.22\n"//120
 			 "  maklib ver.0.01\n"
 			 "  getint ver.0.06\n"
 			 "  osastr ver.0.00\n"
 			 "  binstr ver.0.00\n"
 			 "  fcode  ver.0.00\n"
 			 "  b32    ver.0.01"  //118
+			 "  dumpbk ver.0.00"  //120
 		);
 		r = 1;
 	}
@@ -3697,6 +3700,8 @@ const UCHAR *fe0501cc(int c0, int c1, const UCHAR *p)
 #define TYP_CODE		0
 #define TYP_UNKNOWN		-1
 
+#define MODE_REG_LC3	1	// osecpu120dから試験的に導入.
+
 typedef int Int32;
 
 typedef struct _Appack0Label {
@@ -3709,12 +3714,13 @@ typedef struct _AppackWork {
 	unsigned char *q;
 	char qHalf;
 	int rep[3][8], immR3f;
-	int wait1, wait7, wait3d;
+	int wait1, wait7, wait3d, waitEnd;
 	int pxxTyp[64];
 	int hist[0x40];
 	unsigned char opTbl[256];
 	Appack0Label label[MAXLABELS];
 	int lastLabel;
+	int dr[4];
 
 	// for param.
 	Int32 prm_r[0x40], prm_p[0x40], prm_f[0x40];
@@ -3743,9 +3749,11 @@ void appack_initWork(AppackWork *aw)
 	aw->wait1 = -1;
 	aw->wait7 = 0;
 	aw->wait3d = 0;
+	aw->waitEnd = 0;
 	aw->v_xsiz = 640;
 	aw->v_ysiz = 480;
 	aw->lastLabel = -1;
+	aw->dr[0] = 0;
 	return;
 }
 
@@ -3986,25 +3994,29 @@ fin:
 	return;
 }
 
-void appackSub1p(AppackWork *aw, int i)
+void appackSub1p(AppackWork *aw, int i, char mode)
 // ポインタレジスタのみ, リピートもあり.
 // fcode_getRegに対応している.
 {
 	int j;
+	if (mode == 1 && i <= 6) {
+		appackSub0(aw, i);
+		goto fin;
+	}
 	for (j = 0; j < 8; j++) {
 		if (aw->rep[1][j] == i) break;
 	}
 	if (j >= 2 && i <= 4)
 		j = 8;
 	if (j < 8) {
-		if (j <= 1)
+		if (j <= 1 && mode == 0)
 			appackSub0(aw, 0x5 + j);
 		else {
 			appackSub0(aw, 0x9);
 			appackSub0(aw, 0x8 + j);
 		}
 	} else {
-		if (i <= 4)
+		if (i <= 4 && mode == 0)
 			appackSub0(aw, i);
 		else if (i <= 0x17) {
 			appackSub0(aw, 0x8 | i >> 4);
@@ -4018,6 +4030,7 @@ void appackSub1p(AppackWork *aw, int i)
 			appackSub0(aw, i & 0xf);
 		}
 	}
+fin:
 	return;
 }
 
@@ -4158,6 +4171,17 @@ void appack0_waitFlush(AppackWork *aw)
 		appackSub1op(aw, 0x07);
 		aw->wait7--;
 	}
+	if (aw->wait3d > 0) {
+		appackSub1op(aw, 0x3d);
+		aw->wait3d = 0;
+	}
+	if (aw->waitEnd > 0) {
+		appackSub1op(aw, 0x05);
+		appackSub1s(aw, 0x0009, 0);
+		appackSub1i(aw, 0, len3table0);
+		appackSub1i(aw, -1, len3table0);
+		aw->waitEnd = 0;
+	}
 	return;
 }
 
@@ -4206,7 +4230,7 @@ int appackSub2b(AppackWork *aw, char mode, int j)
 	if (i == j) goto fin;
 	if (mode == 0) {	// TYP_CODEで、opt=0-1.
 		if (!(0 <= aw->label[j].opt && aw->label[j].opt <= 1 && aw->label[j].typ == TYP_CODE)) {
-			fprintf(stderr, "appackSub2b: PLIMM type error. lastLabel=%d, mode=%d, j=%d\n", aw->lastLabel, mode, j);
+			fprintf(stderr, "appackSub2b: PLIMM type error. lastLabel=%d, mode=%d, j=%d (DR0=%d)\n", aw->lastLabel, mode, j, aw->dr[0]);
 			exit(1);
 		}
 		if (i > j) {
@@ -4266,7 +4290,7 @@ int appack0(struct Work *w, char flags)
 	const UCHAR *p = w->ibuf, *pp, *p1;
 	UCHAR *q = w->obuf, *qq;
 //	int r3f = 0, lastLabel = -1, i, j, wait7 = 0, firstDataLabel = -1;
-	int i = 0, j, k, l;
+	int i = 0, j, k, l, m, n;
 	AppackWork aw;
 	char simple = flags & 1, encLidr = flags & 2, flg4, flgD;
 	*q++ = *p++;
@@ -4306,6 +4330,39 @@ int appack0(struct Work *w, char flags)
 			aw.lastLabel++;
 			continue;
 		}
+		if (cmpBytes(p,"f1_f788#4_f78800000001 fcfe00 fcfd_f788#4_80 bc_f788#4_f788#4_f788#4_f788#4_f788#4_f788") != 0) {
+			p += 13 + 3 + 9 + 37;
+			goto appack0_bc;
+		}
+		if (cmpBytes(p,"f1_f788#4_f78800000001 fcfe00 bc_f788#4_f788#4_f788#4_f788#4_f788#4_f788") != 0) {
+			p += 13 + 3 + 37;
+appack0_bc:
+			i = p[-34] << 24 | p[-33] << 16 | p[-32] << 8 | p[-31];
+			j = p[-28] << 24 | p[-27] << 16 | p[-26] << 8 | p[-25];
+			k = p[-22] << 24 | p[-21] << 16 | p[-20] << 8 | p[-19];
+			l = p[-16] << 24 | p[-15] << 16 | p[-14] << 8 | p[-13];
+			m = p[-10] << 24 | p[ -9] << 16 | p[ -8] << 8 | p[ -7];
+			n = p[ -4] << 24 | p[ -3] << 16 | p[ -2] << 8 | p[ -1];
+			if (i == 32 && j == 32 && k == 16 && l == 16 && m == 64 && n == 0) {
+				aw.wait1 = -1;
+				aw.wait7 = 0;
+				aw.wait3d = 0;
+				aw.waitEnd = 0;
+				appackSub1op(&aw, 0x3c);
+				appack_updateRep(&aw, 0, 0x33);
+				appack_updateRep(&aw, 0, 0x32);
+				appack_updateRep(&aw, 0, 0x31);
+				appack_updateRep(&aw, 0, 0x30);
+				appack_updateRep(&aw, 1, 0x32);
+				appack_updateRep(&aw, 1, 0x31);
+				appack_updateRep(&aw, 2, 0x31);
+				appack_updateRep(&aw, 2, 0x30);
+				aw.lastLabel++;
+				continue;
+			}
+			fprintf(stderr, "appack0: error: op=bc (DR0=0x%08x)\n", *p, aw.dr[0]);
+			exit(1);
+		}
 		if (cmpBytes(p,"f1_f788#4_f78800000000") != 0) {
 			appack0_waitFlush(&aw);
 			if (aw.wait1 == 0)
@@ -4325,13 +4382,29 @@ int appack0(struct Work *w, char flags)
 			else {
 				appackSub1op(&aw, 0x02);
 				appackSub1i(&aw, j, len3table0);
-				appackSub1r(&aw, i, 0);
+				appackSub1r(&aw, i, MODE_REG_LC3);
 				appack_updateRep(&aw, 0, i);
 			}
 			p += 14;
 			continue;
 		}
-		if (cmpBytes(p,"f3_f788#4_Yx") != 0) {
+		if (cmpBytes(p, "f3_f788#4_b0 f3_f788#4_bf f1_f788#4_f78800000002 fcfe00") != 0) {	// CALL
+			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
+			j = p[19] << 24 | p[20] << 16 | p[21] << 8 | p[22];
+			k = p[11] << 24 | p[12] << 16 | p[13] << 8 | p[14];
+			if (i == j) {
+				appack0_waitFlush(&aw);
+				aw.lastLabel++;
+				appackSub1op(&aw, 0x3e);
+				k = appackSub2b(&aw, 0, k);
+				appackSub1s(&aw, k, 0);
+				for (i = 0x30; i < 0x40; i++)
+					aw.pxxTyp[i] = TYP_UNKNOWN;
+				p += 32;
+				continue;
+			}
+		}
+		if (cmpBytes(p, "f3_f788#4_Yx") != 0) {
 			appack0_waitFlush(&aw);
 			i = p[7] & 0x3f;
 			j = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
@@ -4344,7 +4417,7 @@ int appack0(struct Work *w, char flags)
 			k = appackSub2b(&aw, flg4, j);
 			appackSub1s(&aw, k, 0);
 			if (flg4 != 0) {
-				appackSub1p(&aw, i);
+				appackSub1p(&aw, i, MODE_REG_LC3);
 				appack_updateRep(&aw, 1, i);
 				aw.pxxTyp[i] = aw.label[j].typ;
 			} else {
@@ -4375,11 +4448,11 @@ int appack0(struct Work *w, char flags)
 			if (flgD != 0)
 				appackSub1op(&aw, 0x0d);
 			appackSub1op(&aw, 0x08);
-			appackSub1p(&aw, i);
+			appackSub1p(&aw, i, 0);
 			if (flgD != 0)
 				appackSub1u(&aw, k);
 			appackSub1u(&aw, 0);
-			appackSub1r(&aw, j, 0);
+			appackSub1r(&aw, j, MODE_REG_LC3);
 			appack_updateRep(&aw, 1, i);
 			appack_updateRep(&aw, 0, j);
 			continue;
@@ -4391,7 +4464,8 @@ int appack0(struct Work *w, char flags)
 			j = p[3] & 0x3f;
 			appackSub1op(&aw, 0x02);
 			appackSub1i(&aw, i | 0x80520000, len3table0);
-			appackSub1r(&aw, j, 0);
+			appackSub1r(&aw, j, MODE_REG_LC3);
+			appack_updateRep(&aw, 0, i);
 			appack_updateRep(&aw, 0, j);
 			p += 10;
 			continue;
@@ -4443,7 +4517,7 @@ int appack0(struct Work *w, char flags)
 				appackSub1op(&aw, k | 0x10);
 				appackSub1r(&aw, p[1] & 0x3f, 0);
 				appackSub1i(&aw, j, len3table[k]);
-				appackSub1r(&aw, i, 0);
+				appackSub1r(&aw, i, MODE_REG_LC3);
 			} else {
 				i = p[3] & 0x3f;
 				j = aw.immR3f;
@@ -4458,7 +4532,7 @@ int appack0(struct Work *w, char flags)
 					appackSub1op(&aw, k | 0x10);
 					appackSub1r(&aw, l & 0x3f, 0);
 					appackSub1i(&aw, j, len3table[k]);
-					appackSub1r(&aw, i, 0);
+					appackSub1r(&aw, i, MODE_REG_LC3);
 				}
 			}
 			if (p[1] != 0xbf) appack_updateRep(&aw, 0, p[1] & 0x3f);
@@ -4496,16 +4570,32 @@ int appack0(struct Work *w, char flags)
 			p += 26;
 			continue;
 		}
-		if (cmpBytes(p,"YxYxYx_f78800000020_Yx_f78800000020") != 0 && 0xa0 <= *p && *p <= 0xa7) {
+//		if (cmpBytes(p,"YxYxYx_f78800000020_Yx_f78800000020") != 0 && 0xa0 <= *p && *p <= 0xa7) {
+//		}
+		if (cmpBytes(p,"bd_f788#4_f788#4_f788#4_f788#4_f788#4_f788#4 9e_b0_bf") != 0) {
+			if (aw.wait3d + aw.waitEnd > 0)
+				appack0_waitFlush(&aw);
+			aw.wait3d = 1;
+			p += 37 + 3;
+			continue;
 		}
+
 		if (cmpBytes(p,"fcfdf788#480") != 0) {
+			i = p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7];
+			aw.dr[0] = i;
 			if (encLidr != 0) {
 				appack0_waitFlush(&aw);
 				appackSub1op(&aw, 0xfd);
-				appackSub1s(&aw, p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7], 0);
+				appackSub1s(&aw, i, 0);
 				appackSub1u(&aw, 0);
 			}
 			p += 9;
+			continue;
+		}
+		if (cmpBytes(p,"fcfe10 f2_f78800000009_b0_f78800000020 f2_f78800000000_b1_f78800000020 f2_f788ffffffff_b2_f78800000020 f3_f788#4_b0 9e_af_bf f1_f788#4_f78800000002 fcfe00") != 0) {
+			aw.waitEnd = 1;
+			p += 3 + 14 * 3 + 8 + 3 + 13 + 3;
+			aw.lastLabel++;
 			continue;
 		}
 		if (cmpBytes(p,"fcfe10") != 0) {
@@ -4520,6 +4610,7 @@ int appack0(struct Work *w, char flags)
 						appackSub1s(&aw, 0x0002, 0);
 						appackSub1i(&aw, aw.prm_r[0x31], len3table0); // mode
 						p = pp;
+						aw.lastLabel++;
 						continue;
 					}
 					appackSub1op(&aw, 0x05);
@@ -4615,24 +4706,33 @@ int appack0(struct Work *w, char flags)
 					continue;
 				}
 				if (aw.prm_r[0x30] == 0x0010) { // api_openWin
+					flg4 = 0;
+					if (aw.prm_r[0x32] != 0) {
+						flg4 = 1;
+						appackSub1op(&aw, 0x04);
+					}
 					appackSub1op(&aw, 0x05);
 					appackSub1s(&aw, 0x0010, 0);
-					if (aw.prm_r[0x31] > 0)
-						aw.v_xsiz = aw.prm_r[0x31];
+					if (aw.prm_r[0x33] > 0)
+						aw.v_xsiz = aw.prm_r[0x33];
 					else
 						aw.v_xsiz = -1;
-					if (aw.prm_r[0x32] > 0)
-						aw.v_ysiz = aw.prm_r[0x32];
-					else if (aw.prm_r[0x32] == 0 && aw.v_xsiz > 0)
+					if (aw.prm_r[0x34] > 0)
+						aw.v_ysiz = aw.prm_r[0x34];
+					else if (aw.prm_r[0x34] == 0 && aw.v_xsiz > 0)
 						aw.v_ysiz = aw.v_xsiz;
 					else
 						aw.v_ysiz = -1;
 					if (simple == 0) {
-						if (aw.prm_r[0x32] == aw.prm_r[0x31] && aw.prm_r[0x32] > 0)
-							aw.prm_r[0x32] = 0;
+						if (aw.prm_r[0x34] == aw.prm_r[0x33] && aw.prm_r[0x34] > 0)
+							aw.prm_r[0x34] = 0;
 					}
-					appackSub1i(&aw, aw.prm_r[0x31], len3table0);
-					appackSub1i(&aw, aw.prm_r[0x32], len3table0);
+					if (flg4 != 0) {
+						appackSub1i(&aw, aw.prm_r[0x31], len3table0);
+						appackSub1i(&aw, aw.prm_r[0x32], len3table0);
+					}
+					appackSub1i(&aw, aw.prm_r[0x33], len3table0);
+					appackSub1i(&aw, aw.prm_r[0x34], len3table0);
 					p = pp;
 					aw.lastLabel++;
 					continue;
@@ -4665,7 +4765,7 @@ int appack0(struct Work *w, char flags)
 		}
 		if (cmpBytes(p,"fcfe30") != 0) {
 			// REM03() : next構文.
-			if (aw.wait3d > 0)
+			if (aw.wait3d + aw.waitEnd > 0)
 				appack0_waitFlush(&aw);
 			while (*p != 0xf3)
 				p += db2binSub2Len(p);
@@ -4674,7 +4774,7 @@ int appack0(struct Work *w, char flags)
 			continue;
 		}
 err:
-		fprintf(stderr, "appack0: error: op=%02x-%02x-%02x-%02x\n", *p, p[1], p[2], p[3]);
+		fprintf(stderr, "appack0: error: op=%02x-%02x-%02x-%02x (DR0=0x%08x)\n", *p, p[1], p[2], p[3], aw.dr[0]);
 		exit(1);
 	}
 	while (aw.q[-1] == 0x00)
@@ -6283,5 +6383,94 @@ err_bit32:
 		q[3] = buf4[0];
 	}
 	return putBuf(w->argOut, w->obuf, (UCHAR *) qi1);
+}
+
+int dumpbk(struct Work *w)
+{
+	const UCHAR *p = &(w->ibuf[3]), *p1 = &(w->ibuf[w->isiz]);
+	int i, j, k;
+	if (w->ibuf[0] != 0x05 || w->ibuf[1] != 0xe2 || w->ibuf[2] != 0x00) {
+		fputs("input file format error.\n", stderr);
+		exit(1);
+	}
+	printf("05e2 0_0\n");
+	while (p < p1) {
+		if (cmpBytes(p, "f1_f788#4_f788#4") != 0) {
+			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
+			j = p[ 9] << 24 | p[10] << 16 | p[11] << 8 | p[12];
+			printf("  f1_f788%08x_f788%08x\n", i, j);
+			p += 13;
+			continue;
+		}
+		if (cmpBytes(p, "f2_f788#4_Yx_f788#4") != 0) {
+			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
+			j = p[10] << 24 | p[11] << 16 | p[12] << 8 | p[13];
+			printf("  f2_f788%08x_%02x_f788%08x\n", i, p[7], j);
+			p += 14;
+			continue;
+		}
+		if (cmpBytes(p, "f3_f788#4_Yx") != 0) {
+			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
+			printf("  f3_f788%08x_%02x\n", i, p[7]);
+			p += 8;
+			continue;
+		}
+		if (cmpBytes(p, "f4_Yx") != 0) {
+			printf("  f4_%02x\n", p[1]);
+			p += 2;
+			continue;
+		}
+		if (cmpBytes(p, "9x_Yx_Yx_Yx_f788#4") != 0 && *p <= 0x9b && *p != 0x97) {
+			i = p[ 6] << 24 | p[ 7] << 16 | p[ 8] << 8 | p[ 9];
+			printf("  %02x_%02x_%02x_%02x_f788%08x\n", *p, p[1], p[2], p[3], i);
+			p += 10;
+			continue;
+		}
+		if (cmpBytes(p, "9e_Yx_Yx") != 0) {
+			printf("  9e_%02x_%02x\n", p[1], p[2]);
+			p += 3;
+			continue;
+		}
+		if (cmpBytes(p, "ax_Yx_Yx_f788#4_Yx_f788#4") != 0 && *p <= 0xa7) {
+			i = p[ 5] << 24 | p[ 6] << 16 | p[ 7] << 8 | p[ 8];
+			j = p[12] << 24 | p[13] << 16 | p[14] << 8 | p[15];
+			printf("  %02x_%02x_%02x_f788%08x_%02x_f788%08x\n", *p, p[1], p[2], i, p[9], j);
+			p += 16;
+			continue;
+		}
+		if (cmpBytes(p, "bx_f788#4_f788#4_f788#4_f788#4_f788#4_f788#4") != 0 && 0xbc <= *p && *p <= 0xbd) {
+			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
+			j = p[ 9] << 24 | p[10] << 16 | p[11] << 8 | p[12];
+			k = p[15] << 24 | p[16] << 16 | p[17] << 8 | p[18];
+			printf("  %02x_f788%08x_f788%08x_f788%08x_", *p, i, j, k);
+			i = p[21] << 24 | p[22] << 16 | p[23] << 8 | p[24];
+			j = p[27] << 24 | p[28] << 16 | p[29] << 8 | p[30];
+			k = p[33] << 24 | p[34] << 16 | p[35] << 8 | p[36];
+			printf("f788%08x_f788%08x_f788%08x\n", i, j, k);
+			p += 37;
+			continue;
+		}
+		if (cmpBytes(p, "fcfdf788#480") != 0) {
+			i = p[ 4] << 24 | p[ 5] << 16 | p[ 6] << 8 | p[ 7];
+			printf("\nfcfd_f788%08x_80 (%d)\n", i, i);
+			p += 9;
+			continue;
+		}
+		if (cmpBytes(p, "fcfe_x0") != 0 && p[2] <= 0x60) {
+			printf("  fcfe_%x_0\n", p[2] >> 4);
+			p += 3;
+			continue;
+		}
+		if (cmpBytes(p, "fcfe_21_f788") != 0) {
+			i = p[ 5] << 24 | p[ 6] << 16 | p[ 7] << 8 | p[ 8];
+			printf("  fcfe_2_1_f788%08x\n", i);
+			p += 9;
+			continue;
+		}
+
+		printf("\ndumpbk: unknown opecode: %02x-%02x-%02x-%02x\n", *p, p[1], p[2], p[3]);
+		exit(1);
+	}
+	return 0;
 }
 

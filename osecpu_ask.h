@@ -11,7 +11,8 @@
 #define api_exit(i)									REM01(); R30=0x0008; R31=i; PCALL(P2F)
 #define api_sleep(opt, msec)						REM01(); R30=0x0009; R31=opt; R32=msec; PCALL(P2F)
 #define api_inkey(_i, mod)							REM01(); R30=0x000d; R31=mod; PCALL(P2F); _i=R30 
-#define api_openWin(xsiz, ysiz)						REM01(); R30=0x0010; R31=xsiz; R32=ysiz; PCALL(P2F)
+#define api_openWin0(mod, c, xsiz, ysiz)			REM01(); R30=0x0010; R31=mod; R32=c; R33=xsiz; R34=ysiz; PCALL(P2F)
+#define api_openWin(xsiz, ysiz)						REM01(); R30=0x0010; R31=0; R32=0; R33=xsiz; R34=ysiz; PCALL(P2F)
 #define api_putcharRxx(reg)							REM01(); R30=0x0001; REM09(0); REM38(4,1,T_UINT8,R31,P31); DDBE(API_REG+(reg&0x3f),0); R32=0; R33=0; R34=0; PCALL(P2F)
 #define api_putString0(s)							REM01(); R30=0x0001; REM09(0); REM38(0,0,T_UINT8,R31,P31); DB%(s,0x00); R32=0; R33=0; R34=0; PCALL(P2F)
 #define api_putString3(s)							REM01(); R30=0x0001; REM09(0); REM38(3,0,T_UINT8,R31,P31); DB%(s,0x00); R32=0; R33=0; R34=0; PCALL(P2F)
@@ -96,7 +97,7 @@
 
 #define OPSWP(...)									DB(0xff, 0x00, 0xff, __VA_ARGS__, 0)	// 2å¬Ç∏Ç¬èëÇ≠. ëÂÇ´Ç¢ï˚Ç©ÇÁèëÇ≠.
 
-#define beginFunc0(label, r1, bit0, p1, f1, bit1, _typ)	ELB(label); DB(0xbc); imm(r1); bit(bit0); imm(p1); imm(f1); bit(bit1); typ(_typ)
+#define beginFunc0(label, r1, bit0, p1, f1, bit1, _typ)	GLB(label); DB(0xbc); imm(r1); bit(bit0); imm(p1); imm(f1); bit(bit1); typ(_typ)
 #define endFunc0(r1, bit0, p1, f1, bit1, _typ)		DB(0xbd); imm(r1); bit(bit0); imm(p1); imm(f1); bit(bit1); typ(_typ); RET()
 #define beginFunc(label)							beginFunc0(label, 32, 32, 16, 16, 64, 0)
 #define endFunc()									endFunc0(32, 32, 16, 16, 64, 0)

@@ -107,6 +107,8 @@ err:
 
 // フロントエンドコード関係.
 
+#define MODE_REG_LC3	1	// osecpu120dから試験的に導入.
+
 typedef struct _DecodeForLoop {
 	int r, bit, v1t, v1v, step, label;
 } DecodeForLoop;
@@ -119,8 +121,8 @@ typedef struct _DecodeLabel {
 typedef struct _DecodeFcodeStr {
 	Hh4Reader hh4r;
 	unsigned char *q;
-	char flag4, flagD, flag14, waitLb0, err;
-	int rep[3][8], bitR[0x40];
+	char flag4, flagD, flag14, waitLb0, wait3d, err;
+	int rep[3][8], bitR[0x40], pxxTyp[0x40];
 	int getIntTyp, getIntBit, getIntOrg, getRegBit, lastLabel;
 	DecodeForLoop floop[16];
 	int floopDepth;
@@ -132,6 +134,8 @@ void fcode_updateRep(DecodeFcodeStr *s, int typ, int r);
 int fcode_getSigned(DecodeFcodeStr *s);
 int fcode_getReg(DecodeFcodeStr *s, int typ, char mode);
 int fcode_getInteger(DecodeFcodeStr *s, const int *len3table);
+void fcode_putInt32(DecodeFcodeStr *s, Int32 i);
+void fcode_putR(DecodeFcodeStr *s, int i);
 void fcode_putOpecode1(DecodeFcodeStr *s, int i);
 void fcode_putLb(DecodeFcodeStr *s, int opt, int i);
 void fcode_putLimm(DecodeFcodeStr *s, int bit, int r, int i);
@@ -140,7 +144,10 @@ void fcode_putCnd(DecodeFcodeStr *s, int r);
 void fcode_putAlu(DecodeFcodeStr *s, int opecode, int bit, int r0, int r1, int r2);
 void fcode_putCp(DecodeFcodeStr *s, int bit, int r0, int r1);
 void fcode_putPcp(DecodeFcodeStr *s, int p0, int p1);
+void fcode_putRemark0(DecodeFcodeStr *s);
+void fcode_putRemark1(DecodeFcodeStr *s);
 int fcode_putLimmOrCp(DecodeFcodeStr *s, int bit, int r);
+void fcode_putPcallP2f(DecodeFcodeStr *s);
 void fcode_ope2(DecodeFcodeStr *s);
 void fcode_ope3(DecodeFcodeStr *s);
 void fcode_ope06(DecodeFcodeStr *s);
@@ -149,6 +156,7 @@ void fcode_ope08(DecodeFcodeStr *s);
 void fcode_opeAlu(DecodeFcodeStr *s, int opecode);
 void fcode_opeCmp(DecodeFcodeStr *s, int opecode);
 void fcode_ope2e(DecodeFcodeStr *s);
+void fcode_ope3d(DecodeFcodeStr *s);
 void fcode_api0002(DecodeFcodeStr *s);
 void fcode_api0003(DecodeFcodeStr *s);
 void fcode_api0004(DecodeFcodeStr *s);
@@ -158,6 +166,7 @@ void fcode_api0010(DecodeFcodeStr *s);
 int fcode_initLabel(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1);
 int fcode_fixLabel(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1);
 int fcode_fixTyp(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1);
+void fcode_unknownBitR(DecodeFcodeStr *s, int r0, int r1);
 
 static int len3table0[7] = { -1, 0, 1, 2, 3, 4, -0x10 /* rep0 */ };
 
@@ -178,10 +187,16 @@ int decode_fcode(const unsigned char *p, const unsigned char *p1, unsigned char 
 	s.flagD = 0;
 	s.flag14 = 1;
 	s.waitLb0 = 0;
+	s.wait3d = -1;
 	s.lastLabel = -1;
 	s.floopDepth = 0;
-	for (i = 0; i < 0x40; i++)
+	for (i = 0; i < 0x40; i++) {
 		s.bitR[i] = BIT_UNKNOWN;
+		s.pxxTyp[i] = PTR_TYP_NULL;
+	}
+	for (i = 1; i <= 4; i++)
+		s.pxxTyp[i] = PTR_TYP_INVALID;	// 値はまだ不明だが推定は可能.
+
 	for (j = 0; j < 3; j++) {
 		for (i = 0; i < 8; i++)
 			s.rep[j][i] = 0x30 + i;
@@ -197,6 +212,8 @@ int decode_fcode(const unsigned char *p, const unsigned char *p1, unsigned char 
 	}
 	while (s.err == 0 && s.floopDepth > 0)
 		fcode_ope07(&s);
+	if (s.err == 0 && s.wait3d > 0)
+		fcode_ope3d(&s);
 	if (s.err == 0) {
 		i = fcode_initLabel(&s, q0 + 1, s.q);
 		if (i == 0)
@@ -311,7 +328,66 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 			fcode_ope2e(s);
 			goto fin;
 		}
-//printf("unknown opecode: 0x%02X\n", opecode); // for debug.
+		if (opecode == 0x3e) {
+			// dか4でabsモード.
+			i = fcode_getSigned(s);
+			s->lastLabel++;
+			fcode_putPlimm(s, 0x30, s->lastLabel);
+			i |= 0x80000000; // 後で補正するためにマークする.
+			i &= 0x80ffffff; // 相対補正.
+			fcode_putPlimm(s, 0x3f, i);
+			fcode_putLb(s, 2, s->lastLabel);
+			fcode_putRemark0(s);
+			goto fin;
+		}
+		if (opecode == 0x3c) {
+			if (s->waitLb0 != 0) {
+				s->lastLabel++;
+				fcode_putLb(s, 0, s->lastLabel);
+			}
+			while (s->err == 0 && s->floopDepth > 0)
+				fcode_ope07(s);
+			if (s->err == 0 && s->wait3d == -1) {
+				fcode_putRemark1(s);
+				fcode_putLimm(s, 16, 0x30, 0x0009);
+				fcode_putLimm(s, 16, 0x31, 0);
+				fcode_putLimm(s, 32, 0x32, -1);
+				fcode_putPcallP2f(s);
+				fcode_unknownBitR(s, 0x30, 0x32);
+			}
+			if (s->err == 0 && s->wait3d == 1)
+				fcode_ope3d(s);
+			s->lastLabel++;
+			fcode_putLb(s, 1, s->lastLabel);
+			fcode_putRemark0(s);
+			fcode_putOpecode1(s, 0xbc);
+			fcode_putInt32(s, 32);
+			fcode_putInt32(s, 32);
+			fcode_putInt32(s, 16);
+			fcode_putInt32(s, 16);
+			fcode_putInt32(s, 64);
+			fcode_putInt32(s, 0);
+			fcode_updateRep(s, 0, 0x33);
+			fcode_updateRep(s, 0, 0x32);
+			fcode_updateRep(s, 0, 0x31);
+			fcode_updateRep(s, 0, 0x30);
+			fcode_updateRep(s, 1, 0x32);
+			fcode_updateRep(s, 1, 0x31);
+			fcode_updateRep(s, 2, 0x31);
+			fcode_updateRep(s, 2, 0x30);
+			s->wait3d = 1;
+			goto fin;
+		}
+		if (opecode == 0xfd) {
+			i = fcode_getSigned(s);
+			fcode_putOpecode1(s, 0xfc);
+			fcode_putOpecode1(s, 0xfd);
+			fcode_putInt32(s, i);
+			i = hh4ReaderGetUnsigned(&s->hh4r);
+			fcode_putR(s, i);
+			goto fin;
+		}
+		printf("decode_fcodeStep: unknown opecode: 0x%02X\n", opecode); // for debug.
 err:
 		s->err = 1;
 	}
@@ -663,7 +739,7 @@ void fcode_ope2(DecodeFcodeStr *s)
 	bit = s->getIntBit;
 	if (bit == BIT_UNKNOWN)
 		bit = 32;
-	r0 = fcode_getReg(s, 0, 0);
+	r0 = fcode_getReg(s, 0, MODE_REG_LC3);
 	if (s->getIntTyp == 0)
 		fcode_putLimm(s, bit, r0, i);
 	else {
@@ -679,7 +755,7 @@ void fcode_ope3(DecodeFcodeStr *s)
 	Int32 i = fcode_getSigned(s); // 先へ行く方が優遇される. 戻る系はforで支援しているので.
 	int p = 0x3f;
 	if (s->flag4 != 0)
-		p = fcode_getReg(s, 0, 0);
+		p = fcode_getReg(s, 0, MODE_REG_LC3);
 	if (s->flagD != 0) {
 		fprintf(stderr, "fcode_ope3: Internal error.\n");
 		exit(1);
@@ -690,7 +766,8 @@ void fcode_ope3(DecodeFcodeStr *s)
 	i &= 0x80ffffff; // 相対補正.
 	fcode_putPlimm(s, p, i);
 	s->flag4 = s->flagD = 0;
-	fcode_updateRep(s, 1, p);
+	if (p != 0x3f)
+		fcode_updateRep(s, 1, p);
 	return;
 }
 
@@ -760,9 +837,10 @@ void fcode_ope07(DecodeFcodeStr *s)
 
 void fcode_ope08(DecodeFcodeStr *s)
 {
-	int p, typ = PTR_TYP_INVALID, i, r;
+	int p, typ, i, r;
 	p = fcode_getReg(s, 1, 0);
-	if (s->flagD != 0)
+	typ = s->pxxTyp[p];
+	if (typ == PTR_TYP_NULL || s->flagD != 0)
 		typ = hh4ReaderGetUnsigned(&s->hh4r);
 	i = hh4ReaderGetUnsigned(&s->hh4r);
 	if (i != 0) {
@@ -770,7 +848,7 @@ void fcode_ope08(DecodeFcodeStr *s)
 		goto fin;
 	}
 	s->getRegBit = 32;
-	r = fcode_getReg(s, 0, 0);
+	r = fcode_getReg(s, 0, MODE_REG_LC3);
 	fcode_putOpecode1(s, 0x88);
 	fcode_putP(s, p);
 	fcode_putTyp(s, typ);
@@ -825,7 +903,7 @@ void fcode_opeAlu(DecodeFcodeStr *s, int opecode)
 	}
 	r0 = r1;
 	if (s->flag4 != 0)
-		r0 = fcode_getReg(s, 0, 0);
+		r0 = fcode_getReg(s, 0, MODE_REG_LC3);
 	if (s->getIntTyp == 0) {
 		fcode_putLimm(s, bit, 0x3f, i);
 		i = 0x3f;
@@ -864,7 +942,7 @@ void fcode_opeCmp(DecodeFcodeStr *s, int opecode)
 	}
 	if (s->flagD != 0) {
 		s->getRegBit = 32;
-		r0 = fcode_getReg(s, 0, 0);
+		r0 = fcode_getReg(s, 0, MODE_REG_LC3);
 		bit0 = s->getRegBit;
 	}
 	fcode_putCmp(s, opecode | 0x80, bit0, bit1, r0, r1, i);
@@ -917,6 +995,19 @@ fin:
 	return;
 }
 
+void fcode_ope3d(DecodeFcodeStr *s)
+{
+	fcode_putOpecode1(s, 0xbd);
+	fcode_putInt32(s, 32);
+	fcode_putInt32(s, 32);
+	fcode_putInt32(s, 16);
+	fcode_putInt32(s, 16);
+	fcode_putInt32(s, 64);
+	fcode_putInt32(s, 0);
+	fcode_putPcp(s, 0x3f, 0x30);
+	return;
+}
+
 void fcode_api0002(DecodeFcodeStr *s)
 // api_drawPoint(mod, c, x, y).
 {
@@ -934,6 +1025,7 @@ void fcode_api0002(DecodeFcodeStr *s)
 		s->flag4 = 0;
 	}
 	fcode_putPcallP2f(s);
+	fcode_unknownBitR(s, 0x30, 0x34);
 	return;
 }
 
@@ -958,6 +1050,7 @@ void fcode_api0003(DecodeFcodeStr *s)
 		s->flag4 = 0;
 	}
 	fcode_putPcallP2f(s);
+	fcode_unknownBitR(s, 0x30, 0x36);
 	return;
 }
 
@@ -983,6 +1076,7 @@ void fcode_api0004(DecodeFcodeStr *s)
 		s->flag4 = 0;
 	}
 	fcode_putPcallP2f(s);
+	fcode_unknownBitR(s, 0x30, 0x36);
 	return;
 }
 
@@ -1008,6 +1102,7 @@ void fcode_api0005(DecodeFcodeStr *s)
 		s->flag4 = 0;
 	}
 	fcode_putPcallP2f(s);
+	fcode_unknownBitR(s, 0x30, 0x36);
 	return;
 }
 
@@ -1019,6 +1114,7 @@ void fcode_api0009(DecodeFcodeStr *s)
 	fcode_putLimmOrCp(s, 16, 0x31); // opt.
 	fcode_putLimmOrCp(s, 32, 0x32); // msec.
 	fcode_putPcallP2f(s);
+	fcode_unknownBitR(s, 0x30, 0x32);
 	return;
 }
 
@@ -1027,9 +1123,18 @@ void fcode_api0010(DecodeFcodeStr *s)
 {
 	fcode_putRemark1(s);
 	fcode_putLimm(s, 16, 0x30, 0x0010);
-	fcode_putLimmOrCp(s, 16, 0x31); // xsiz.
-	fcode_putLimmOrCp(s, 16, 0x32); // ysiz.
+	if (s->flag4 != 0) {
+		fcode_putLimmOrCp(s, 16, 0x31);
+		fcode_putLimmOrCp(s, 32, 0x32);
+		s->flag4 = 0;
+	} else {
+		fcode_putLimm(s, 16, 0x31, 0);
+		fcode_putLimm(s, 32, 0x32, 0);
+	}
+	fcode_putLimmOrCp(s, 16, 0x33); // xsiz.
+	fcode_putLimmOrCp(s, 16, 0x34); // ysiz.
 	fcode_putPcallP2f(s);
+	fcode_unknownBitR(s, 0x30, 0x34);
 	return;
 }
 
@@ -1060,6 +1165,8 @@ int fcode_getInstrLength(const unsigned char *p)
 		getTypSize(i, &typSize0, &typSize1, &typSign);
 		len = 1 + 6 + 6 + (typSize0 * j / 8);
 	}
+	if (0xbc <= ope && ope <= 0xbd) len = 37;
+	if (ope == 0xfc && p[1] == 0xfd) len = 9;
 	if (ope == 0xfc && p[1] == 0xfe) {
 		ope1 = p[2];
 		if (ope1 == 0x00 || ope1 == 0x10 || ope1 == 0x30)
@@ -1286,4 +1393,12 @@ int fcode_fixTypSub(int *pTyp, int p, unsigned char *typ32)
 			typ = PTR_TYP_INVALID;
 	}
 	return typ;
+}
+
+void fcode_unknownBitR(DecodeFcodeStr *s, int r0, int r1)
+{
+	int r;
+	for (r = r0; r <= r1; r++)
+		s->bitR[r] = BIT_UNKNOWN;
+	return;
 }

@@ -832,20 +832,26 @@ fin:
 
 void api0010_openWin(OsecpuVm *vm)
 {
-	int i;
-	if (vram != 0)
-		jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
-	v_xsiz = execStep_getRxx(vm, 0x31, 16);
-	v_ysiz = execStep_getRxx(vm, 0x32, 16);
-	if (v_ysiz == 0) v_ysiz = v_xsiz;
-	if (v_xsiz <= 0 || 4096 < v_xsiz || v_ysiz < 0 || 4096 < v_ysiz)
-		jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
-	if (vm->errorCode > 0) goto fin;
-	vram = malloc(v_xsiz * v_ysiz * 4);
-	drv_openWin(v_xsiz, v_ysiz, (void *) vram, &apiWork.winClosed);
-	apiWork.autoSleep = 1;
-	for (i = 0; i < v_xsiz * v_ysiz; i++)
-		vram[i] = 0;
+	int i, c, x, y;
+	c = apiLoadColor(vm, 0x32);
+	x = execStep_getRxx(vm, 0x33, 16);
+	y = execStep_getRxx(vm, 0x34, 16);
+	if (y == 0 && x > 0) y = x;
+	if (vram == 0) {
+		if (x <= 0 || 4096 < x || y < 0 || 4096 < y)
+			jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
+		if (vm->errorCode > 0) goto fin;
+		v_xsiz = x;
+		v_ysiz = y;
+		vram = malloc(x * y * sizeof (int));
+		drv_openWin(x, y, (void *) vram, &apiWork.winClosed);
+		apiWork.autoSleep = 1;
+	} else {
+		if (x != v_xsiz || y != v_ysiz)
+			jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
+	}
+	for (i = 0; i < x * y; i++)
+		vram[i] = c;
 fin:
 	return;
 }
