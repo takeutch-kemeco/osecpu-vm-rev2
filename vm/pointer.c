@@ -45,7 +45,7 @@ int jitcStepPointer(OsecpuJitc *jitc)
 			jitcSetRetCode(pRC, JITC_LABEL_REDEFINED);
 			goto fin;
 		}
-		if (!(0 <= opt && opt <= 2)) {
+		if (!(0 <= opt && opt <= 3)) {
 			jitcSetRetCode(pRC, JITC_BAD_LABEL_TYPE);
 			goto fin;
 		}

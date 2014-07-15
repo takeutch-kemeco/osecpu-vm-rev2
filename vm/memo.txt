@@ -131,6 +131,6 @@
   ‚à‚µƒƒ‚ƒŠ‚ª‚È‚©‚Á‚½ê‡‚ÉNULL‚ð•Ô‚µ‚Ä‚Ù‚µ‚¢‚Ì‚È‚çAAPI‚ð—˜—p‚·‚éB
 
 2014.07.03–Ø:
-  cfe-8-5-(fcode-mode)-(src-mode)-(typ)-(Rxx)-(Pxx) : ARRAY_PARAM
+  cfe-8-5-(fcode-mode)-(src-mode)-(typ)-(Rxx)-(Pxx) : REM08(ARRAY_PARAM)
   cfe-9-1-(fcode-mode) : REM9
 

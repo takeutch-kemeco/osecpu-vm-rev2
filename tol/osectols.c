@@ -52,9 +52,10 @@ int db2bin(struct Work *w);
 int disasm(struct Work *w);
 int appack(struct Work *w);
 int maklib(struct Work *w);
-int fcode(struct Work *w);
+//int fcode(struct Work *w);
 int b32(struct Work *w);
 int dumpbk(struct Work *w);
+int dumpfr(struct Work *w);
 
 #define PUT_USAGE				-999
 #define	FLAGS_PUT_MANY_INFO		1
@@ -105,9 +106,10 @@ int main(int argc, const UCHAR **argv)
 		if (strcmp(cs, "disasm") == 0) { r = disasm(w); }
 		if (strcmp(cs, "appack") == 0) { r = appack(w); }
 		if (strcmp(cs, "maklib") == 0) { r = maklib(w); }
-		if (strcmp(cs, "fcode")  == 0) { r = fcode(w);  }
+	//	if (strcmp(cs, "fcode")  == 0) { r = fcode(w);  }
 		if (strcmp(cs, "b32")    == 0) { r = b32(w);    }
 		if (strcmp(cs, "dumpbk") == 0) { r = dumpbk(w); }
+		if (strcmp(cs, "dumpfr") == 0) { r = dumpfr(w); }
 	}
 	if (cs != NULL && strcmp(cs, "getint") == 0) {
 		cs = searchArg(w, "exp:");
@@ -178,14 +180,16 @@ int main(int argc, const UCHAR **argv)
 			 "  lbstk  ver.0.04\n"//117
 			 "  db2bin ver.0.20\n"//119
 			 "  disasm ver.0.02\n"
-			 "  appack ver.0.22\n"//120
+			 "  appack ver.0.23\n"//121
 			 "  maklib ver.0.01\n"
 			 "  getint ver.0.06\n"
 			 "  osastr ver.0.00\n"
 			 "  binstr ver.0.00\n"
-			 "  fcode  ver.0.00\n"
-			 "  b32    ver.0.01"  //118
-			 "  dumpbk ver.0.00"  //120
+		//	 "  fcode  ver.0.00\n"
+			 "  b32    ver.0.01\n"  //118
+			 "  dumpbk ver.0.01\n"  //121
+			 "  dumpfr ver.0.00"  //121
+
 		);
 		r = 1;
 	}
@@ -2120,6 +2124,11 @@ identSkip:
 					{
 						k = w->ele0[2].iValue;
 						j = k - j;
+					} else if (w->ele0[0].typ == ELEMENT_REG && w->ele0[0].iValue == i &&
+						w->ele0[1].typ == ELEMENT_NOTEQL && w->ele0[2].typ == ELEMENT_REG && w->ele0[3].typ == ELEMENT_TERMINATE)
+					{
+						k = w->ele0[2].iValue | 0x80520000;
+						j = 1;
 					} else
 						i = -1;
 				}
@@ -2152,7 +2161,6 @@ identSkip:
 					for (j = q - qq; j >= 0; j--)
 						qq[j + 46*0+18] = qq[j];
 					char tmpStr[52];
-				//	sprintf(tmpStr, "DB(0xfc,0xfe,0x21,0xf7,0x88);DDBE(0x%08X);", k);
 					sprintf(tmpStr, "REM02(0x%08X);", k);
 					// printf("strlen=%d\n", strlen(tmpStr));
 				//	memcpy(qq, tmpStr, 46); q += 46;
@@ -3290,7 +3298,7 @@ UCHAR *db2binSub3(UCHAR *p0, UCHAR *p1, UCHAR *p2)
 				fprintf(stderr, "db2binSub3: unknown srcMode=0x%02x\n", srcMode);
 				exit(1);
 			}
-		} else if (cmpBytes(p, "f3_f788#4_b0 9e_af_bf f1_f788#4_f78800000002 fcfe00") != 0) {	// 8+3+13+3=27
+		} else if (cmpBytes(p, "f3_f788#4_b0 9e_af_bf f1_f788#4_f78800000003 fcfe00") != 0) {	// 8+3+13+3=27
 			for (i = 0; i < 27; i++)
 				p0[i] = p[i];
 			p0 += 27;
@@ -3913,7 +3921,8 @@ fin:
 	return;
 }
 
-static int len3table0[7] = { -1, 0, 1, 2, 3, 4, -0x10 /* rep0 */ };
+static int len3table0[7] = { -1, 0, 1, 2, 3, 4, -0x10+0 /* rep0 */ };
+static int len3table14[7] = { -0x10+1 /* rep1 */, -0x10+0 /* rep0 */,  1,  2,  3,  4,  5 }; // ADD
 
 void appackSub1i(AppackWork *aw, int i, int *t)
 // 定数および整数レジスタ, リピートもあり.
@@ -3954,6 +3963,8 @@ void appackSub1i(AppackWork *aw, int i, int *t)
 	return;
 }
 
+#define APPACK_SUB1R_PRM	5
+
 void appackSub1r(AppackWork *aw, int i, char mode)
 // 整数レジスタのみ, リピートもあり.
 // fcode_getRegに対応している.
@@ -3966,17 +3977,17 @@ void appackSub1r(AppackWork *aw, int i, char mode)
 	for (j = 0; j < 8; j++) {
 		if (aw->rep[0][j] == i) break;
 	}
-	if (j >= 2 && i <= 4)
+	if (j >= APPACK_SUB1R_PRM && i < 7 - APPACK_SUB1R_PRM)
 		j = 8;
 	if (j < 8) {
-		if (j <= 1 && mode == 0)
-			appackSub0(aw, 0x5 + j);
+		if (j < APPACK_SUB1R_PRM && mode == 0)
+			appackSub0(aw, (7 - APPACK_SUB1R_PRM) + j);
 		else {
 			appackSub0(aw, 0x9);
 			appackSub0(aw, 0x8 + j);
 		}
 	} else {
-		if (i <= 4 && mode == 0)
+		if (i < 7 - APPACK_SUB1R_PRM && mode == 0)
 			appackSub0(aw, i);
 		else if (i <= 0x17) {
 			appackSub0(aw, 0x8 | i >> 4);
@@ -4006,17 +4017,17 @@ void appackSub1p(AppackWork *aw, int i, char mode)
 	for (j = 0; j < 8; j++) {
 		if (aw->rep[1][j] == i) break;
 	}
-	if (j >= 2 && i <= 4)
+	if (j >= APPACK_SUB1R_PRM && i < 7 - APPACK_SUB1R_PRM)
 		j = 8;
 	if (j < 8) {
-		if (j <= 1 && mode == 0)
-			appackSub0(aw, 0x5 + j);
+		if (j < APPACK_SUB1R_PRM && mode == 0)
+			appackSub0(aw, (7 - APPACK_SUB1R_PRM) + j);
 		else {
 			appackSub0(aw, 0x9);
 			appackSub0(aw, 0x8 + j);
 		}
 	} else {
-		if (i <= 4 && mode == 0)
+		if (i < 7 - APPACK_SUB1R_PRM && mode == 0)
 			appackSub0(aw, i);
 		else if (i <= 0x17) {
 			appackSub0(aw, 0x8 | i >> 4);
@@ -4141,7 +4152,7 @@ const UCHAR *appack0_param0(const UCHAR *p, AppackWork *aw)
 		}
 		break;
 	}
-	if (cmpBytes(p, "f3_f788#4_b0 9e_af_bf f1_f788#4_f78800000002 fcfe00") == 0)	// 8+3+13+3=27
+	if (cmpBytes(p, "f3_f788#4_b0 9e_af_bf f1_f788#4_f78800000003 fcfe00") == 0)	// 8+3+13+3=27
 		p = NULL;
 	else
 		p += 27;
@@ -4313,7 +4324,7 @@ int appack0(struct Work *w, char flags)
 			continue;
 		}
 		if (cmpBytes(p,"f1_f788#4_f78800000001 ae_f788#4f788") != 0) {
-			appack0_waitFlush(&aw);
+		//	appack0_waitFlush(&aw);
 			i = p[16] << 24 | p[17] << 16 | p[18] << 8 | p[19];
 			j = p[22] << 24 | p[23] << 16 | p[24] << 8 | p[25];
 			appackSub1op(&aw, 0x2e);
@@ -4349,6 +4360,7 @@ appack0_bc:
 				aw.wait3d = 0;
 				aw.waitEnd = 0;
 				appackSub1op(&aw, 0x3c);
+#if 0
 				appack_updateRep(&aw, 0, 0x33);
 				appack_updateRep(&aw, 0, 0x32);
 				appack_updateRep(&aw, 0, 0x31);
@@ -4357,6 +4369,7 @@ appack0_bc:
 				appack_updateRep(&aw, 1, 0x31);
 				appack_updateRep(&aw, 2, 0x31);
 				appack_updateRep(&aw, 2, 0x30);
+#endif
 				aw.lastLabel++;
 				continue;
 			}
@@ -4373,7 +4386,33 @@ appack0_bc:
 			p += 13;
 			continue;
 		}
-		if (cmpBytes(p,"f2_f788#4_Yx_f78800000020") != 0) {
+		if (cmpBytes(p, "f2_f788#4_bb_f78800000020 f2_f788#4_ba_f78800000020 b2_bb_f78800000020_ba_f78800000020_Yx") != 0) {	// malloc
+			appack0_waitFlush(&aw);
+			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6]; // typ
+			j = p[17] << 24 | p[18] << 16 | p[19] << 8 | p[20]; // len
+			k = p[43] & 0x3f;
+			if (cmpBytes(p + 44, "9e_Yx_bb f2_f788#4_b9_f78800000020 f2_f78800000000_bb_f78800000020 "
+					"f1_f788#4_f78800000002 89_b9_f78800000020_bb_f788#4_f78800000000 f2_f78800000001_bf_f78800000020 "
+					"8e_bb_f788#4_bf_f78800000020_bb f2_f78800000001_bf_f78800000020 94_bb_bf_bb_f78800000020 "
+					"a0_ba_bb_f78800000020_bf_f78800000020 f4_bf f3_f788#4_bf") != 0) {
+				// malloc_initInt
+				l = p[50] << 24 | p[51] << 16 | p[52] << 8 | p[53];
+				if (l != 0)
+					appackSub1op(&aw, 0x04);
+				appackSub1op(&aw, 0x32);
+				appackSub1i(&aw, i, len3table0);
+				appackSub1i(&aw, j, len3table0);
+				appackSub1r(&aw, k, MODE_REG_LC3);
+				if (l != 0)
+					appackSub1i(&aw, l, len3table0);
+				aw.pxxTyp[k] = i;
+				appack_updateRep(&aw, 1, k);
+				p += 189;
+				aw.lastLabel++;
+				continue;
+			}
+		}
+		if (cmpBytes(p, "f2_f788#4_Yx_f78800000020") != 0) {
 			appack0_waitFlush(&aw);
 			i = p[7] & 0x3f;
 			j = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
@@ -4388,7 +4427,7 @@ appack0_bc:
 			p += 14;
 			continue;
 		}
-		if (cmpBytes(p, "f3_f788#4_b0 f3_f788#4_bf f1_f788#4_f78800000002 fcfe00") != 0) {	// CALL
+		if (cmpBytes(p, "f3_f788#4_b0 f3_f788#4_bf f1_f788#4_f78800000003 fcfe00") != 0) {	// CALL
 			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
 			j = p[19] << 24 | p[20] << 16 | p[21] << 8 | p[22];
 			k = p[11] << 24 | p[12] << 16 | p[13] << 8 | p[14];
@@ -4427,7 +4466,7 @@ appack0_bc:
 			p += 8;
 			continue;
 		}
-		if (cmpBytes(p, "88Yxf788#4f78800000000Yxf78800000020") != 0) {
+		if (cmpBytes(p, "88_Yx_f788#4_f78800000000_Yx_f78800000020") != 0) {
 			appack0_waitFlush(&aw);
 			i = p[1]  & 0x3f;
 			j = p[14] & 0x3f;
@@ -4439,7 +4478,7 @@ appack0_bc:
 				aw.pxxTyp[i] = k;
 			}
 			flg4 = 1;
-			if (cmpBytes(p, "f2f78800000001bff78800000020 8eYxf788#4bff78800000020Yx") != 0 && p[1-21] == p[15] && p[15] == p[29]) {
+			if (cmpBytes(p, "f2_f78800000001_bf_f78800000020 8e_Yx_f788#4_bf_f78800000020_Yx") != 0 && p[1-21] == p[15] && p[15] == p[29]) {
 				flg4 = 0;
 				p += 30;
 			}
@@ -4457,6 +4496,120 @@ appack0_bc:
 			appack_updateRep(&aw, 0, j);
 			continue;
 		}
+		if (cmpBytes(p, "89_Yx_f78800000020_Yx_f788#4_f78800000000") != 0) {
+			appack0_waitFlush(&aw);
+			i = p[1] & 0x3f;	// r
+			j = p[8] & 0x3f;	// p
+			k = p[11] << 24 | p[12] << 16 | p[13] << 8 | p[14];
+			p += 21;
+			flgD = 0;
+			if (aw.pxxTyp[j] != k) {
+				flgD = 1;
+				aw.pxxTyp[j] = k;
+			}
+			flg4 = 1;
+			if (cmpBytes(p, "f2_f78800000001_bf_f78800000020 8e_Yx_f788#4_bf_f78800000020_Yx") != 0 && p[2-21] == p[15] && p[15] == p[29]) {
+				flg4 = 0;
+				p += 30;
+			}
+			if (flg4 != 0)
+				appackSub1op(&aw, 0x04);
+			if (flgD != 0)
+				appackSub1op(&aw, 0x0d);
+			appackSub1op(&aw, 0x09);
+			appackSub1r(&aw, i, 0);
+			appackSub1p(&aw, j, 0);
+			if (flgD != 0)
+				appackSub1u(&aw, k);
+			appackSub1u(&aw, 0);
+			appack_updateRep(&aw, 1, j);
+			appack_updateRep(&aw, 0, i);
+			continue;
+		}
+		if (cmpBytes(p, "8e_Yx_f788#4_Yx_f78800000020_bf 88_bf_f788#4_f78800000000_Yx_f78800000020") != 0) {
+			// PALMEM0
+			i = p[1] & 0x3f; // p
+			j = p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7];	// typ
+			k = p[8] & 0x3f; // offset-r
+			l = p[30] & 0x3f; // data-r
+			p += 37;
+			flgD = 0;
+			if (aw.pxxTyp[i] != j) {
+				flgD = 1;
+				aw.pxxTyp[i] = j;
+			}
+			if (flgD != 0)
+				appackSub1op(&aw, 0x0d);
+			appackSub1op(&aw, 0x08);
+			appackSub1p(&aw, i, 0);
+			if (flgD != 0)
+				appackSub1u(&aw, j);
+			appackSub1u(&aw, 1);
+			appackSub1i(&aw, k | 0x80520000, len3table14);
+			appackSub1r(&aw, l, MODE_REG_LC3);
+			appack_updateRep(&aw, 1, i);
+			appack_updateRep(&aw, 0, k);
+			appack_updateRep(&aw, 0, l);
+			continue;
+		}
+		if (cmpBytes(p, "8e_Yx_f788#4_Yx_f78800000020_bf 89_Yx_f78800000020_bf_f788#4_f78800000000") != 0) {
+			// PASMEM0
+			i = p[1] & 0x3f; // p
+			j = p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7];	// typ
+			k = p[8] & 0x3f; // offset-r
+			l = p[17] & 0x3f; // data-r
+			p += 37;
+			flgD = 0;
+			if (aw.pxxTyp[i] != j) {
+				flgD = 1;
+				aw.pxxTyp[i] = j;
+			}
+			if (flgD != 0)
+				appackSub1op(&aw, 0x0d);
+			appackSub1op(&aw, 0x09);
+			appackSub1r(&aw, l, 0);
+			appackSub1p(&aw, i, 0);
+			if (flgD != 0)
+				appackSub1u(&aw, j);
+			appackSub1u(&aw, 1);
+			appackSub1i(&aw, k | 0x80520000, len3table14);
+			appack_updateRep(&aw, 1, i);
+			appack_updateRep(&aw, 0, k);
+			appack_updateRep(&aw, 0, l);
+			continue;
+		}
+		if (cmpBytes(p, "8e_Yx_f788#4_Yx_f78800000020_Yx") != 0) {
+			i = p[1] & 0x3f; // p1
+			j = p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7];	// typ
+			k = p[8] & 0x3f; // r
+			l = p[15] & 0x3f; // p0
+			p += 16;
+			flg4 = flgD = 0;
+			if (i != l) flg4 = 1;
+			if (aw.pxxTyp[i] != j) {
+				flgD = 1;
+				aw.pxxTyp[i] = j;
+			}
+			if (flg4 != 0)
+				appackSub1op(&aw, 0x04);
+			if (flgD != 0)
+				appackSub1op(&aw, 0x0d);
+			appackSub1op(&aw, 0x0e);
+			appackSub1p(&aw, i, 0);
+			if (flgD != 0)
+				appackSub1u(&aw, j);
+			if (k != 0x3f) {
+				k |= 80520000;
+				appack_updateRep(&aw, 0, k);
+			} else
+				k = aw.immR3f;
+			appackSub1i(&aw, k, len3table14);
+			if (flg4 != 0)
+				appackSub1p(&aw, l, MODE_REG_LC3);
+			appack_updateRep(&aw, 1, i);
+			appack_updateRep(&aw, 1, l);
+			continue;
+		}
 		if (cmpBytes(p, "90YxYxYx_f788") != 0 && p[2] == p[1]) {
 			// CP
 			appack0_waitFlush(&aw);
@@ -4470,7 +4623,7 @@ appack0_bc:
 			p += 10;
 			continue;
 		} 
-		if (cmpBytes(p,"YxYxYxYx_f788") != 0 && 0x90 <= *p && *p <= 0x9b && *p != 0x97) {
+		if (cmpBytes(p, "YxYxYxYx_f788") != 0 && 0x90 <= *p && *p <= 0x9b && *p != 0x97) {
 			appack0_waitFlush(&aw);
 			static int len3table[12][7] = {
 			//	{ -1,  0,  1,  2,  3,  4, R0 }, // general
@@ -4541,7 +4694,20 @@ appack0_bc:
 			p += 10;
 			continue;
 		}
-		if (cmpBytes(p,"YxYxYx_f78800000020_bf_f78800000020 f4_bf f3_f788#4_bf") != 0 && 0xa0 <= *p && *p <= 0xa7) {
+		if (cmpBytes(p, "9e_Yx_Yx") != 0) {
+			i = p[1] & 0x3f;
+			j = p[2] & 0x3f;
+			if (i != 0x3f && j != 0x3f) {
+				appackSub1op(&aw, 0x1e);
+				appackSub1p(&aw, i, 0);
+				appackSub1p(&aw, j, MODE_REG_LC3);
+				appack_updateRep(&aw, 1, i);
+				appack_updateRep(&aw, 1, j);
+				p += 3;
+				continue;
+			}
+		}
+		if (cmpBytes(p, "YxYxYx_f78800000020_bf_f78800000020 f4_bf f3_f788#4_bf") != 0 && 0xa0 <= *p && *p <= 0xa7) {
 			appack0_waitFlush(&aw);
 			i = p[21] << 24 | p[22] << 16 | p[23] << 8 | p[24];
 			i = appackSub2b(&aw, 0, i);
@@ -4570,9 +4736,9 @@ appack0_bc:
 			p += 26;
 			continue;
 		}
-//		if (cmpBytes(p,"YxYxYx_f78800000020_Yx_f78800000020") != 0 && 0xa0 <= *p && *p <= 0xa7) {
+//		if (cmpBytes(p, "YxYxYx_f78800000020_Yx_f78800000020") != 0 && 0xa0 <= *p && *p <= 0xa7) {
 //		}
-		if (cmpBytes(p,"bd_f788#4_f788#4_f788#4_f788#4_f788#4_f788#4 9e_b0_bf") != 0) {
+		if (cmpBytes(p, "bd_f788#4_f788#4_f788#4_f788#4_f788#4_f788#4 9e_b0_bf") != 0) {
 			if (aw.wait3d + aw.waitEnd > 0)
 				appack0_waitFlush(&aw);
 			aw.wait3d = 1;
@@ -4580,10 +4746,10 @@ appack0_bc:
 			continue;
 		}
 
-		if (cmpBytes(p,"fcfdf788#480") != 0) {
+		if (cmpBytes(p, "fcfd_f788#4_80") != 0) {
 			i = p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7];
 			aw.dr[0] = i;
-			if (encLidr != 0) {
+			if (encLidr != 0 /* && aw.wait1 != 1 && aw.wait7 == 0 && aw.wait3d == 0 && aw.waitEnd == 0 */) {
 				appack0_waitFlush(&aw);
 				appackSub1op(&aw, 0xfd);
 				appackSub1s(&aw, i, 0);
@@ -4592,10 +4758,13 @@ appack0_bc:
 			p += 9;
 			continue;
 		}
-		if (cmpBytes(p,"fcfe10 f2_f78800000009_b0_f78800000020 f2_f78800000000_b1_f78800000020 f2_f788ffffffff_b2_f78800000020 f3_f788#4_b0 9e_af_bf f1_f788#4_f78800000002 fcfe00") != 0) {
+		if (cmpBytes(p, "fcfe10 f2_f78800000009_b0_f78800000020 f2_f78800000000_b1_f78800000020 f2_f788ffffffff_b2_f78800000020 f3_f788#4_b0 9e_af_bf f1_f788#4_f78800000003 fcfe00") != 0) {
 			aw.waitEnd = 1;
+//printf("waitEnd = 1\n");
 			p += 3 + 14 * 3 + 8 + 3 + 13 + 3;
 			aw.lastLabel++;
+			while (cmpBytes(p, "fcfd_f788#4_80") != 0)
+				p += 9;
 			continue;
 		}
 		if (cmpBytes(p,"fcfe10") != 0) {
@@ -4704,6 +4873,32 @@ appack0_bc:
 					p = pp;
 					aw.lastLabel++;
 					continue;
+				}
+				if (aw.prm_r[0x30] == 0x000d) { // api_inkey
+					j = 0;
+					if (cmpBytes(pp, "fcfd_f788#4_80") != 0) {
+						j = pp[4] << 24 | pp[5] << 16 | pp[6] << 8 | pp[7];
+						aw.dr[0] = j;
+						pp += 9;
+					}
+					if (cmpBytes(pp, "90_b0_b0_Yx_f788") != 0) {
+						i = pp[3] & 0x3f;
+						appackSub1op(&aw, 0x05);
+						appackSub1s(&aw, 0x000d, 0);
+						appackSub1i(&aw, aw.prm_r[0x31], len3table0);
+						appackSub1r(&aw, i, MODE_REG_LC3);
+						appack_updateRep(&aw, 0, 0x32);
+						appack_updateRep(&aw, 0, 0x31);
+						appack_updateRep(&aw, 0, i);
+						p = pp + 10;
+						aw.lastLabel++;
+						if (j != 0 && encLidr != 0) {
+							appackSub1op(&aw, 0xfd);
+							appackSub1s(&aw, j, 0);
+							appackSub1u(&aw, 0);
+						}
+						continue;
+					}
 				}
 				if (aw.prm_r[0x30] == 0x0010) { // api_openWin
 					flg4 = 0;
@@ -5533,25 +5728,27 @@ int appack2(struct Work *w, char level)
 			i = i << 7 | *p++ >> 1;
 		} while ((p[-1] & 1) == 0);
 		//printf("org.size=%d\n", i);
-		w->obuf[2] = 0xf0;
-		q = &w->obuf[3];
-		char of = 0;
-		pp = p;
-#if 0
-		for (;;) {
-			if (*p == 0x15)      { appackSub1(&q, &of, 1, 1); p++; }
-			else if (*p == 0x19) { appackSub1(&q, &of, 2, 1); p++; }
-			else if (*p == 0x21) { appackSub1(&q, &of, 3, 1); p++; }
-			else                 { appackSub1(&q, &of, 0, 1);      }
-			appackSub1(&q, &of, i >> 8, 1);
-			if (of == 0) break;
-			q = &w->obuf[3];
-			of = 0;
-			appackSub0(&q, &of, 0x08);
-			p = pp;
-		}
-#endif
-		*q++ = i & 0xff;
+		AppackWork aw;
+		aw.q = &w->obuf[3];
+		aw.qHalf = 0;
+		w->obuf[2] = 0x02;
+		char flag8 = 0;
+	//	if (0x000000 <= i && i <= 0x000006) flag8 = 0;	// x
+		if (0x000007 <= i && i <= 0x00003f) flag8 = 1;	// 8x
+	//	if (0x000040 <= i && i <= 0x0001ff) flag8 = 0;	// cxx
+		if (0x000200 <= i && i <= 0x000fff) flag8 = 1;	// exxx
+		if (0x001000 <= i && i <= 0x00ffff) flag8 = 1;	// 74xxxx
+	//	if (0x010000 <= i && i <= 0x0fffff) flag8 = 0;	// 75xxxxx
+		if (0x100000 <= i && i <= 0xffffff) flag8 = 1;	// 76xxxxxx
+		if (i >= 0x01000000) { fprintf(stderr, "appack2: too large file.\n"); exit(1); }
+		if (flag8 != 0)
+			appackSub0(&aw, 0x08);
+		if (*p == 0x15)      { appackSub1u(&aw, 1); p++; }
+		else if (*p == 0x19) { appackSub1u(&aw, 2); p++; }
+		else if (*p == 0x21) { appackSub1u(&aw, 3); p++; }
+		else                 { appackSub1u(&aw, 0);      }
+		appackSub1u(&aw, i);
+		q = aw.q;
 		while (p < w->ibuf + w->isiz)
 			*q++ = *p++;
 		printf("tk5:%d\n", q - w->obuf);
@@ -5569,6 +5766,8 @@ int appack(struct Work *w)
 	if (f == 0) r = appack0(w, 0);
 	if (f == 1) r = appack0(w, 2);	// encLidr=1
 	if (f == 2) r = appack0(w, 3);	// simple=1, encLidr=1
+	if (f == 4) r = appack2(w, 0);	// tek5 fast
+	if (f == 5) r = appack2(w, 1);	// tek5 best (very slow)
 
 //	if (f == 1) r = appack1(w);
 //	if (f == 2) r = appack2(w, 0);
@@ -5847,6 +6046,8 @@ void fc_sub4(const UCHAR **pp, char *pi, const UCHAR **p1, char *i1)
 	}
 	return;
 }
+
+#if 0
 
 int fcode(struct Work *w)
 {
@@ -6152,6 +6353,8 @@ end_op:
 	return 0;
 }
 
+#endif
+
 int b32(struct Work *w)
 {
 	int i, j, k, l, *qi, *qi1;
@@ -6393,8 +6596,9 @@ int dumpbk(struct Work *w)
 		fputs("input file format error.\n", stderr);
 		exit(1);
 	}
-	printf("05e2 0_0\n");
+	printf("0000: 05e2 0_0\n");
 	while (p < p1) {
+		printf("%04x: ", p - w->ibuf);
 		if (cmpBytes(p, "f1_f788#4_f788#4") != 0) {
 			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
 			j = p[ 9] << 24 | p[10] << 16 | p[11] << 8 | p[12];
@@ -6420,6 +6624,29 @@ int dumpbk(struct Work *w)
 			p += 2;
 			continue;
 		}
+		if (cmpBytes(p, "88_Yx_f788#4_f788#4_Yx_f788#4") != 0) {
+			i = p[ 4] << 24 | p[ 5] << 16 | p[ 6] << 8 | p[ 7];
+			j = p[10] << 24 | p[11] << 16 | p[12] << 8 | p[13];
+			k = p[17] << 24 | p[18] << 16 | p[19] << 8 | p[20];
+			printf("  89_%02x_f788%08x_f788%08x_%02x_f788%08x\n", p[1], i, j, p[14], k);
+			p += 21;
+			continue;
+		}
+		if (cmpBytes(p, "89_Yx_f788#4_Yx_f788#4_f788#4") != 0) {
+			i = p[ 4] << 24 | p[ 5] << 16 | p[ 6] << 8 | p[ 7];
+			j = p[11] << 24 | p[12] << 16 | p[13] << 8 | p[14];
+			k = p[17] << 24 | p[18] << 16 | p[19] << 8 | p[20];
+			printf("  89_%02x_f788%08x_%02x_f788%08x_f788%08x\n", p[1], i, p[8], j, k);
+			p += 21;
+			continue;
+		}
+		if (cmpBytes(p, "8e_Yx_f788#4_Yx_f788#4_Yx") != 0) {
+			i = p[ 4] << 24 | p[ 5] << 16 | p[ 6] << 8 | p[ 7];
+			j = p[11] << 24 | p[12] << 16 | p[13] << 8 | p[14];
+			printf("  8e_%02x_f788%08x_%02x_f788%08x_%02x\n", p[1], i, p[8], j, p[15]);
+			p += 16;
+			continue;
+		}
 		if (cmpBytes(p, "9x_Yx_Yx_Yx_f788#4") != 0 && *p <= 0x9b && *p != 0x97) {
 			i = p[ 6] << 24 | p[ 7] << 16 | p[ 8] << 8 | p[ 9];
 			printf("  %02x_%02x_%02x_%02x_f788%08x\n", *p, p[1], p[2], p[3], i);
@@ -6438,6 +6665,25 @@ int dumpbk(struct Work *w)
 			p += 16;
 			continue;
 		}
+		if (cmpBytes(p, "ae_f788#4_f788#4") != 0) {
+			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
+			j = p[ 9] << 24 | p[10] << 16 | p[11] << 8 | p[12];
+			p += 13;
+			printf("  ae_f788%08x_f788%08x\n", i, j);
+			printf("%04x:     ", p - w->ibuf);
+			i = db2binDataWidth(i) * j / 8;
+			for (j = 0; j < i; j++)
+				printf("%02x", *p++);
+			printf("\n");
+			continue;
+		}
+		if (cmpBytes(p, "b2_Yx_f788#4_Yx_f788#4_Yx") != 0) {
+			i = p[ 4] << 24 | p[ 5] << 16 | p[ 6] << 8 | p[ 7];
+			j = p[11] << 24 | p[12] << 16 | p[13] << 8 | p[14];
+			printf("  b2_%02x_f788%08x_%02x_f788%08x_%02x\n", p[1], i, p[8], j, p[15]);
+			p += 16;
+			continue;
+		}
 		if (cmpBytes(p, "bx_f788#4_f788#4_f788#4_f788#4_f788#4_f788#4") != 0 && 0xbc <= *p && *p <= 0xbd) {
 			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
 			j = p[ 9] << 24 | p[10] << 16 | p[11] << 8 | p[12];
@@ -6452,7 +6698,7 @@ int dumpbk(struct Work *w)
 		}
 		if (cmpBytes(p, "fcfdf788#480") != 0) {
 			i = p[ 4] << 24 | p[ 5] << 16 | p[ 6] << 8 | p[ 7];
-			printf("\nfcfd_f788%08x_80 (%d)\n", i, i);
+			printf("fcfd_f788%08x_80 (%d)\n", i, i);
 			p += 9;
 			continue;
 		}
@@ -6473,4 +6719,404 @@ int dumpbk(struct Work *w)
 	}
 	return 0;
 }
+
+// hh4関係.
+
+typedef struct _Hh4ReaderPointer {
+	const unsigned char *p;
+	int half;
+} Hh4ReaderPointer;
+
+typedef struct _Hh4Reader {
+	Hh4ReaderPointer p, p1;
+	int length, errorCode;
+} Hh4Reader;
+
+
+void hh4ReaderInit(Hh4Reader *hh4r, void *p, int half, void *p1, int half1)
+{
+	hh4r->p.p = p;
+	hh4r->p.half = half;
+	hh4r->p1.p = p1;
+	hh4r->p1.half = half1;
+	hh4r->errorCode = 0;
+	return;
+}
+
+int hh4ReaderEnd(Hh4Reader *hh4r)
+{
+	int retCode = 0;
+	if (hh4r->p.p > hh4r->p1.p)
+		retCode = 1;
+	if (hh4r->p.p == hh4r->p1.p && hh4r->p.half >= hh4r->p1.half)
+		retCode = 1;
+	return retCode;
+}
+
+int hh4ReaderGet4bit(Hh4Reader *hh4r)
+{
+	int value = 0;
+	if (hh4ReaderEnd(hh4r) != 0) {
+		hh4r->errorCode = 1;
+		goto fin;
+	}
+	value = *hh4r->p.p;
+	if (hh4r->p.half == 0) {
+		value >>= 4;
+		hh4r->p.half = 1;
+	} else {
+		value &= 0xf;
+		hh4r->p.p++;
+		hh4r->p.half = 0;
+	}
+fin:
+	printf("%x", value);
+	return value;
+}
+
+Int32 hh4ReaderGetUnsigned(Hh4Reader *hh4r)
+{
+	int i = hh4ReaderGet4bit(hh4r), len = 3;
+	if (i <= 0x6)
+		;	// 0xxx型
+	else if (i == 0x7) {
+		len = hh4ReaderGetUnsigned(hh4r) * 4;
+		if (len > 32) {
+			hh4r->errorCode = 1;
+			len = 0;
+		}
+		int j;
+		i = 0;
+		for (j = len; j > 0; j -= 4) {
+			i <<= 4;
+			i |= hh4ReaderGet4bit(hh4r);
+		}
+	} else if (i <= 0xb) {	// 10xx_xxxx型
+		i = i << 4 | hh4ReaderGet4bit(hh4r);
+		len = 6;
+		i &= 0x3f;
+	} else if (i <= 0xd) {	// 110x_xxxx_xxxx型
+		i = i << 8 | hh4ReaderGet4bit(hh4r) << 4;
+		i |= hh4ReaderGet4bit(hh4r);
+		len = 9;
+		i &= 0x1ff;
+	} else if (i == 0xe) {	// 1110_xxxx_xxxx_xxxx型
+		i = hh4ReaderGet4bit(hh4r) << 8;
+		i |= hh4ReaderGet4bit(hh4r) << 4;
+		i |= hh4ReaderGet4bit(hh4r);
+		len = 12;
+	} else { // 0x0fは読み飛ばす.
+		i = hh4ReaderGetUnsigned(hh4r);
+		len = hh4r->length;
+	}
+	hh4r->length = len;
+	return i;
+}
+
+Int32 hh4ReaderGetSigned(Hh4Reader *hh4r)
+{
+	Int32 i = hh4ReaderGetUnsigned(hh4r);
+	int len = hh4r->length;
+	if (0 < len && len <= 31 && i >= (1 << (len - 1)))
+		i -= 1 << len; // MSBが1なら引き算して負数にする.
+	return i;
+}
+
+Int32 hh4ReaderGet4Nbit(Hh4Reader *hh4r, int n)
+{
+	int i;
+	Int32 value = 0;
+	for (i = 0; i < n; i++)
+		value = value << 4 | hh4ReaderGet4bit(hh4r);
+	return value;
+}
+
+int dumpfr_getUnsigned(Hh4Reader *hh4r)
+{
+	return hh4ReaderGetUnsigned(hh4r);
+}
+
+int dumpfr_getSigned(Hh4Reader *hh4r)
+{
+	int i = hh4ReaderGetSigned(hh4r);
+	if (hh4r->length == 3) {	// 0,1,2,3,4,5,-1.
+		i &= 7;
+		if (i == 6)
+			i = -1;
+	}
+	return i;
+}
+
+void dumpfr_skipHh4(Hh4Reader *hh4r, int i)
+{
+	// 手抜きなのでビット指定コードがあった場合のことを考えていない.
+	int j;
+	for (j = 0; j < i; j++) {
+		printf("_");
+		dumpfr_getUnsigned(hh4r);
+	}
+	return;
+}
+
+int dumpfr_getReg(Hh4Reader *hh4r, int *rep, char mode)
+{
+	int i = dumpfr_getUnsigned(hh4r);
+	if (hh4r->length == 3 && mode == 0) {
+		if (i >= 5)
+			i += 0x18 - 5;
+	}
+	if (0x18 <= i && i <= 0x1f)
+		i = rep[i & 7];
+	else if (0x40 <= i && i <= 0x47)
+		i += 0x18 - 0x40;
+	return i;
+}
+
+void dumpfr_updateRep(int *rep, int r)
+{
+	int tmp0 = r, tmp1, i;
+	for (i = 0; i < 8; i++) {
+		tmp1 = rep[i];
+		rep[i] = tmp0;
+		if (tmp1 == r) break;
+		tmp0 = tmp1;
+	}
+	return;
+}
+
+int dumpfr(struct Work *w)
+{
+	Hh4Reader hh4r;
+	char flag4 = 0, flagD = 0, flag14 = 0;
+	int op, *hist = malloc(256 * sizeof (int));
+	int r3f = 0, lastLabel = -1, i, j, k = 0, repP[8];
+	char *pregTypeFlag = malloc(64);
+	UCHAR *opTbl = malloc(256);
+	if (w->ibuf[0] != 0x05 || w->ibuf[1] != 0xe2 || w->ibuf[2] < 0x10) {
+		fputs("input file format error.\n", stderr);
+		exit(1);
+	}
+	hh4ReaderInit(&hh4r, w->ibuf + 2, 0, w->ibuf + w->isiz, 0);
+	for (op = 0; op < 256; op++) {
+		hist[op] = 0;
+		opTbl[op] = op;
+	}
+	opTbl[0x00] = 0x14;
+	opTbl[0x14] = 0x00;
+	for (i = 0; i < 64; i++)
+		pregTypeFlag[i] = 0; /* 推測不. */
+	for (i = 1; i <= 4; i++)
+		pregTypeFlag[i] = 1; // 推測可能.
+	for (i = 0; i < 8; i++)
+		repP[i] = 0x30 + i;
+	printf("0000: 05e2");
+	for (;;) {
+		if (hh4ReaderEnd(&hh4r) != 0) break;
+		if (flag4 == 0 && flagD == 0)
+			printf("\n%04x: ", (hh4r.p.p - w->ibuf) * 2 + hh4r.p.half);
+		op = dumpfr_getUnsigned(&hh4r);
+		if (hh4ReaderEnd(&hh4r) != 0 && op == 0) {
+			// 末尾の0.5バイトを埋めていた0を発見.
+			continue;
+		}
+		op = opTbl[op];
+		if (op == 0x1) {
+			if (flag4 == 0 && flagD == 0)
+				continue;
+		}
+		if (op == 0x4) {
+			if (flag4 == 0) {
+				flag4 = 1;
+				printf("_");
+				continue;
+			}
+		}
+		if (op == 0x2) {
+			dumpfr_skipHh4(&hh4r, 2);
+			continue;
+		}
+		if (op == 0x3) {
+			if (flag4 == 0) {
+				dumpfr_skipHh4(&hh4r, 1);
+				continue;
+			}
+			dumpfr_skipHh4(&hh4r, 1);
+			printf("_");
+			i = dumpfr_getReg(&hh4r, repP, 1);
+			pregTypeFlag[i] = 1;
+			dumpfr_updateRep(repP, i);
+			flag4 = 0;
+			continue;
+		}
+		if (op == 0x5) {
+			printf("_");
+			i = dumpfr_getSigned(&hh4r);
+			if (i == 0x0002) {
+				j = 4;
+				if (flag4 != 0) j = 1;
+				dumpfr_skipHh4(&hh4r, j);
+				flag4 = 0;
+				continue;
+			}
+			if (i == 0x0003) {
+				j = 6;
+				if (flag4 != 0) j = 1;
+				dumpfr_skipHh4(&hh4r, j);
+				flag4 = 0;
+				continue;
+			}
+			if (i == 0x0004) {
+				j = 6;
+				if (flag4 != 0) j = 1;
+				dumpfr_skipHh4(&hh4r, j);
+				flag4 = 0;
+				continue;
+			}
+			if (i == 0x0005) {
+				j = 6;
+				if (flag4 != 0) j = 1;
+				dumpfr_skipHh4(&hh4r, j);
+				flag4 = 0;
+				continue;
+			}
+			if (i == 0x0009) {	// api_sleep
+				dumpfr_skipHh4(&hh4r, 2);
+				continue;
+			}
+			if (i == 0x000d) {	// api_inkey
+				dumpfr_skipHh4(&hh4r, 2);
+				continue;
+			}
+			if (i == 0x0010) {
+				j = 2;
+				if (flag4 != 0) j = 4;
+				dumpfr_skipHh4(&hh4r, j);
+				flag4 = 0;
+				continue;
+			}
+			printf("\ndumpfr: unknown function number : R30=0x%04x\n", i);
+			exit(1);
+		}
+		if (op == 0x6) {
+			j = 2;
+			if (flag4 != 0) j++;
+			if (flagD != 0) j++;
+			dumpfr_skipHh4(&hh4r, j);
+			flag4 = flagD = 0;
+			continue;
+		}
+		if (op == 0x07) {
+			if (flag4 == 0 && flagD == 0)
+				continue;
+		}
+		if (op == 0x08) {
+			printf("_");
+			i = dumpfr_getReg(&hh4r, repP, 0);
+			if (pregTypeFlag[i] == 0)
+				flagD = 1;
+			pregTypeFlag[i] = 1;
+			if (flagD != 0)
+				dumpfr_skipHh4(&hh4r, 1);
+			printf("_");
+			j = dumpfr_getUnsigned(&hh4r);
+			dumpfr_skipHh4(&hh4r, j + 1);
+			dumpfr_updateRep(repP, i);
+			flag4 = flagD = 0;
+			continue;
+		}
+		if (op == 0x09) {
+			dumpfr_skipHh4(&hh4r, 1);
+			printf("_");
+			i = dumpfr_getReg(&hh4r, repP, 0);
+			if (pregTypeFlag[i] == 0)
+				flagD = 1;
+			pregTypeFlag[i] = 1;
+			if (flagD != 0)
+				dumpfr_skipHh4(&hh4r, 1);
+			printf("_");
+			j = dumpfr_getUnsigned(&hh4r);
+			dumpfr_skipHh4(&hh4r, j);
+			dumpfr_updateRep(repP, i);
+			flag4 = flagD = 0;
+			continue;
+		}
+		if (op == 0x0d) {
+			if (flagD == 0) {
+				flagD = 1;
+				printf("_");
+				continue;
+			}
+		}
+		if (0x10 <= op && op <= 0x1b && op != 0x17) {
+			j = 2;
+			if (flag4 != 0) j++;
+			dumpfr_skipHh4(&hh4r, j);
+			flag4 = flagD = 0;
+			continue;
+		}
+		if (0x20 <= op && op <= 0x27) {
+			if (flagD == 0) {
+				j = 2;
+				if (flag4 != 0) j++;
+				dumpfr_skipHh4(&hh4r, j);
+				flag4 = 0;
+				continue;
+			}
+		}
+		if (op == 0x2e) {
+			printf("_");
+			i = dumpfr_getUnsigned(&hh4r);
+			printf("_");
+			j = dumpfr_getUnsigned(&hh4r);
+			printf("_");
+			j = db2binDataWidth(i) * j / 4;
+			for (i = 0; i < j; i++)
+				hh4ReaderGet4bit(&hh4r);
+			continue;
+		}
+		if (op == 0x32) {
+			printf("_");
+			i = dumpfr_getUnsigned(&hh4r);
+			printf("_");
+			j = dumpfr_getUnsigned(&hh4r);
+			printf("_");
+			k = dumpfr_getReg(&hh4r, repP, 1);
+			if (flagD == 0) {
+				if (flag4 != 0) {
+					dumpfr_skipHh4(&hh4r, 1);
+					flag4 = 0;
+				}
+				dumpfr_updateRep(repP, k);
+				pregTypeFlag[k] = 1;
+				continue;
+			}
+		}
+		if (op == 0x3c) {
+			if (flag4 == 0 && flagD == 0)
+				continue;
+		}
+		if (op == 0x3d) {
+			if (flag4 == 0 && flagD == 0)
+				continue;
+		}
+		if (op == 0x3e) {
+			dumpfr_skipHh4(&hh4r, 1);
+			continue;
+		}
+		if (op == 0xfd) {
+			printf("_");
+			i = dumpfr_getUnsigned(&hh4r);
+			printf("_");
+			j = dumpfr_getUnsigned(&hh4r);
+			if (j == 0)
+				printf(" (%d)", i);
+			continue;
+		}
+		printf("\ndumpfr: unknown opecode: %02x\n", op);
+		exit(1);
+	}
+	printf("\n");
+	return 0;
+}
+
 

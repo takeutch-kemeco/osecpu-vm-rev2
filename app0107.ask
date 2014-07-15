@@ -14,6 +14,9 @@ LOCALLABELS(8);
 	SInt32 ix:R10, iy:R11, movewait:R12, idir:R13, invline:R14, waitUint:R18;
 	VPtr invstr:P01;
 
+	api_malloc_initInt(invstr, T_UINT4, 32 * 6, 0);
+#if 0
+
 //	PLIMM(invstr, L_invstr0);
 
 DAT_SA(L_invstr0, T_UINT4, 32 * 6);
@@ -24,8 +27,9 @@ DAT_SA(L_invstr0, T_UINT4, 32 * 6);
 	D4B(0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0);
 	D4B(0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0, 0,0,0,0,0,0,0,0);
 DAT_END();
+#endif
 
-	api_openWin(324, 228);
+//	api_openWin(324, 228);
 
 //	OPSWP(0x14, 0x06);
 
@@ -55,9 +59,10 @@ LB0(L_next_group);
 
 	for (;;) {
 		// âÊñ ÇçÏÇÈ.
-		api_fillRect(MODE_COL3, 0, -1, -1, 0, 0);
-		api_drawStringDec_2(MODE_COL3, -1, 1, 1,  4 * 8 + 2, 0 * 16 + 2, 'SCORE:\1    HIGH:\1', score, 8, 2, high,  8, 2);
-		R04 = fx; R05 = 13; PLIMM(P02, L_fighter); R03 = 3; PAD(); R08 = 6; CALL(L_putchar);
+//		api_fillRect(MODE_COL3, 0, -1, -1, 0, 0);
+		api_openWin(324, 228);
+//		api_drawStringDec_2(MODE_COL3, -1, 1, 1,  4 * 8 + 2, 0 * 16 + 2, 'SCORE:\1    HIGH:\1', score, 8, 2, high,  8, 2);
+		R04 = fx; R05 = 13; PLIMM(P02, L_fighter); R03 = 3; /* PAD(); */ R08 = 6; CALL(L_putchar);
 
 		for (i = 0; i != 6; i++) {
 			for (j = 0; j != 26; j++) {
@@ -68,7 +73,7 @@ LB0(L_next_group);
 					R04 = j + ix; R05 = i + iy;
 					PLIMM(P02, L_invader);
 					R03 = 4;
-					R08 = 2; PAD();
+					R08 = 2; // PAD();
 					CALL(L_putchar);
 				}
 			}
@@ -152,7 +157,7 @@ LB0(L_next_group);
 						if (R03 != 0) { // hit!
 							k -= R03;
 						//	R03 = 0;
-							ly = 0; PAD();
+							ly = 0; // PAD();
 							for (i = 0; i != 6; i++) {
 								PASMEM0(32, ly, T_UINT4, invstr, k);
 								k++;
@@ -180,7 +185,7 @@ LB0(L_next_group);
 				}
 				j = iy + invline;
 				if (j == 12) {
-					api_drawString(MODE_COL3, 1, 1, 1,  15 * 8 + 2, 6 * 16 + 2, 'GAME OVER');
+//					api_drawString(MODE_COL3, 1, 1, 1,  15 * 8 + 2, 6 * 16 + 2, 'GAME OVER');
 					do {
 						api_sleep(0, waitUint);
 						api_inkey(i, 0);
@@ -194,7 +199,7 @@ LB0(L_next_group);
 			}
 		}
 	}
-
+	api_end();
 
 beginFunc(L_putchar);
 	do {
@@ -203,7 +208,7 @@ beginFunc(L_putchar);
 		
 		for (y1 = 2; y1 != 18; y1++) {
 			y = y0 * 16;
-			y += y1; PAD();
+			y += y1; // PAD();
 			for (x1 = 0; x1 != xsiz; x1++) {
 				x = x0 * 8;
 				x += x1;

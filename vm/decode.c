@@ -136,14 +136,19 @@ int fcode_getReg(DecodeFcodeStr *s, int typ, char mode);
 int fcode_getInteger(DecodeFcodeStr *s, const int *len3table);
 void fcode_putInt32(DecodeFcodeStr *s, Int32 i);
 void fcode_putR(DecodeFcodeStr *s, int i);
+void fcode_putP(DecodeFcodeStr *s, int i);
+void fcode_putBit(DecodeFcodeStr *s, int i);
+void fcode_putTyp(DecodeFcodeStr *s, int i);
 void fcode_putOpecode1(DecodeFcodeStr *s, int i);
 void fcode_putLb(DecodeFcodeStr *s, int opt, int i);
 void fcode_putLimm(DecodeFcodeStr *s, int bit, int r, int i);
 void fcode_putPlimm(DecodeFcodeStr *s, int p, int i);
 void fcode_putCnd(DecodeFcodeStr *s, int r);
+void fcode_putPadd(DecodeFcodeStr *s, int bit, int p0, int typ, int p1, int r);
 void fcode_putAlu(DecodeFcodeStr *s, int opecode, int bit, int r0, int r1, int r2);
 void fcode_putCp(DecodeFcodeStr *s, int bit, int r0, int r1);
 void fcode_putPcp(DecodeFcodeStr *s, int p0, int p1);
+void fcode_putCmp(DecodeFcodeStr *s, int opecode, int bit0, int bit1, int r0, int r1, int r2);
 void fcode_putRemark0(DecodeFcodeStr *s);
 void fcode_putRemark1(DecodeFcodeStr *s);
 int fcode_putLimmOrCp(DecodeFcodeStr *s, int bit, int r);
@@ -153,6 +158,7 @@ void fcode_ope3(DecodeFcodeStr *s);
 void fcode_ope06(DecodeFcodeStr *s);
 void fcode_ope07(DecodeFcodeStr *s);
 void fcode_ope08(DecodeFcodeStr *s);
+void fcode_ope09(DecodeFcodeStr *s);
 void fcode_opeAlu(DecodeFcodeStr *s, int opecode);
 void fcode_opeCmp(DecodeFcodeStr *s, int opecode);
 void fcode_ope2e(DecodeFcodeStr *s);
@@ -162,6 +168,7 @@ void fcode_api0003(DecodeFcodeStr *s);
 void fcode_api0004(DecodeFcodeStr *s);
 void fcode_api0005(DecodeFcodeStr *s);
 void fcode_api0009(DecodeFcodeStr *s);
+void fcode_api000d(DecodeFcodeStr *s);
 void fcode_api0010(DecodeFcodeStr *s);
 int fcode_initLabel(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1);
 int fcode_fixLabel(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1);
@@ -169,6 +176,7 @@ int fcode_fixTyp(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1);
 void fcode_unknownBitR(DecodeFcodeStr *s, int r0, int r1);
 
 static int len3table0[7] = { -1, 0, 1, 2, 3, 4, -0x10 /* rep0 */ };
+static int len3table14[7] = { -0x10+1 /* rep1 */, -0x10+0 /* rep0 */,  1,  2,  3,  4,  5 }; // ADD
 
 #define BIT_UNKNOWN		0x7fffffff	// とにかく大きな値にする.
 #define MIN(a, b)		((a) < (b) ? (a) : (b))
@@ -247,7 +255,7 @@ int fcode_swapOpecode(DecodeFcodeStr *s, int i)
 
 void decode_fcodeStep(DecodeFcodeStr *s)
 {
-	int opecode, i;
+	int opecode, i, j, k, l;
 	if (s->err == 0) {
 		opecode = hh4ReaderGetUnsigned(&s->hh4r);
 		if (opecode == 0 && hh4ReaderEnd(&s->hh4r) != 0)
@@ -295,6 +303,7 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 			if (i == 0x0004) { fcode_api0004(s); goto fin; }
 			if (i == 0x0005) { fcode_api0005(s); goto fin; }
 			if (i == 0x0009) { fcode_api0009(s); goto fin; }
+			if (i == 0x000d) { fcode_api000d(s); goto fin; }
 			if (i == 0x0010) { fcode_api0010(s); goto fin; }
 		}
 		if (opecode == 0x6) {
@@ -309,6 +318,10 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 		}
 		if (opecode == 0x08) {
 			fcode_ope08(s);
+			goto fin;
+		}
+		if (opecode == 0x09) {
+			fcode_ope09(s);
 			goto fin;
 		}
 		if (opecode == 0x0d) {
@@ -328,17 +341,47 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 			fcode_ope2e(s);
 			goto fin;
 		}
-		if (opecode == 0x3e) {
-			// dか4でabsモード.
-			i = fcode_getSigned(s);
-			s->lastLabel++;
-			fcode_putPlimm(s, 0x30, s->lastLabel);
-			i |= 0x80000000; // 後で補正するためにマークする.
-			i &= 0x80ffffff; // 相対補正.
-			fcode_putPlimm(s, 0x3f, i);
-			fcode_putLb(s, 2, s->lastLabel);
-			fcode_putRemark0(s);
-			goto fin;
+		if (opecode == 0x32) {	// malloc
+			// 手抜きでbitを反映させていない.
+			i = fcode_putLimmOrCp(s, 32, 0x3b);	// typ
+			l = s->getIntTyp; // 0ならconst.
+			j = fcode_putLimmOrCp(s, 32, 0x3a);	// len
+			k = fcode_getReg(s, 1, MODE_REG_LC3);
+			fcode_putOpecode1(s, 0xb2);
+			fcode_putR(s, 0x3b);
+			fcode_putBit(s, 32);
+			fcode_putR(s, 0x3a);
+			fcode_putBit(s, 32);
+			fcode_putP(s, k);
+			if (s->flagD == 0) {
+				if (l != 0) goto err;
+				fcode_putPcp(s, 0x3b, k);
+				if (s->flag4 != 0)
+					fcode_putLimmOrCp(s, 32, 0x39);
+				else
+					fcode_putLimm(s, 32, 0x39, 0);
+				s->flag4 = 0;
+				fcode_putLimm(s, 32, 0x3b, 0);
+				s->lastLabel++;
+				fcode_putLb(s, 2, s->lastLabel);
+				fcode_putOpecode1(s, 0x89);
+				fcode_putR(s, 0x39);
+				fcode_putBit(s, 32);
+				fcode_putP(s, 0x3b);
+				fcode_putTyp(s, i);
+				fcode_putInt32(s, 0);
+				fcode_putLimm(s, 32, 0x3f, 1);
+				fcode_putPadd(s, 32, 0x3b, i, 0x3b, 0x3f);
+				fcode_putLimm(s, 32, 0x3f, 1);
+				fcode_putAlu(s, 0x94, 32, 0x3b, 0x3b, 0x3f);
+				fcode_putCmp(s, 0xa0, 1, 32, 0x3f, 0x3a, 0x3b);
+				fcode_putCnd(s, 0x3f);
+				fcode_putPlimm(s, 0x3f, s->lastLabel);
+				s->pxxTyp[k] = i;
+				fcode_updateRep(s, 1, k);
+				fcode_unknownBitR(s, 0x39, 0x3b);
+				goto fin;
+			}
 		}
 		if (opecode == 0x3c) {
 			if (s->waitLb0 != 0) {
@@ -362,11 +405,12 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 			fcode_putRemark0(s);
 			fcode_putOpecode1(s, 0xbc);
 			fcode_putInt32(s, 32);
-			fcode_putInt32(s, 32);
+			fcode_putBit(s, 32);
 			fcode_putInt32(s, 16);
-			fcode_putInt32(s, 16);
+			fcode_putBit(s, 16);
 			fcode_putInt32(s, 64);
-			fcode_putInt32(s, 0);
+			fcode_putTyp(s, 0);
+#if 0
 			fcode_updateRep(s, 0, 0x33);
 			fcode_updateRep(s, 0, 0x32);
 			fcode_updateRep(s, 0, 0x31);
@@ -375,7 +419,20 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 			fcode_updateRep(s, 1, 0x31);
 			fcode_updateRep(s, 2, 0x31);
 			fcode_updateRep(s, 2, 0x30);
+#endif
 			s->wait3d = 1;
+			goto fin;
+		}
+		if (opecode == 0x3e) {
+			// dか4でabsモード.
+			i = fcode_getSigned(s);
+			s->lastLabel++;
+			fcode_putPlimm(s, 0x30, s->lastLabel);
+			i |= 0x80000000; // 後で補正するためにマークする.
+			i &= 0x80ffffff; // 相対補正.
+			fcode_putPlimm(s, 0x3f, i);
+			fcode_putLb(s, 3, s->lastLabel);
+			fcode_putRemark0(s);
 			goto fin;
 		}
 		if (opecode == 0xfd) {
@@ -418,6 +475,8 @@ int fcode_getSigned(DecodeFcodeStr *s)
 	return i;
 }
 
+#define APPACK_SUB1R_PRM	5
+
 int fcode_getReg(DecodeFcodeStr *s, int typ, char mode)
 // 4ビット形式の場合(0～6): R00～R04, rep0～rep1.
 // そのほかの場合(0～0x47): R00～R17, rep0～rep7, R20～R3F, R18～R1F, bit...
@@ -425,8 +484,8 @@ int fcode_getReg(DecodeFcodeStr *s, int typ, char mode)
 {
 	int i = hh4ReaderGetUnsigned(&s->hh4r);
 	if (s->hh4r.length == 3 && mode == 0) {
-		if (i >= 5)
-			i += 0x18 - 5;
+		if (i >= 7 - APPACK_SUB1R_PRM)
+			i += 0x18 - (7 - APPACK_SUB1R_PRM);
 	}
 	if (0x18 <= i && i <= 0x1f)
 		i = s->rep[typ][i & 7];
@@ -726,7 +785,7 @@ void fcode_putPcallP2f(DecodeFcodeStr *s)
 	s->lastLabel++;
 	fcode_putPlimm(s, 0x30, s->lastLabel);
 	fcode_putPjmp(s, 0x2f);
-	fcode_putLb(s, 2, s->lastLabel);
+	fcode_putLb(s, 3, s->lastLabel);
 	fcode_putRemark0(s);
 	return;
 }
@@ -755,7 +814,7 @@ void fcode_ope3(DecodeFcodeStr *s)
 	Int32 i = fcode_getSigned(s); // 先へ行く方が優遇される. 戻る系はforで支援しているので.
 	int p = 0x3f;
 	if (s->flag4 != 0)
-		p = fcode_getReg(s, 0, MODE_REG_LC3);
+		p = fcode_getReg(s, 1, MODE_REG_LC3);
 	if (s->flagD != 0) {
 		fprintf(stderr, "fcode_ope3: Internal error.\n");
 		exit(1);
@@ -776,7 +835,7 @@ void fcode_ope06(DecodeFcodeStr *s)
 // プリフィクスD: stepの変更（未実装）.
 // bitはカウンタ比較値のほうで指定できる.
 {
-	int v0v = 0, v0t = 0, v0b = BIT_UNKNOWN;
+	int v0v = 0, v0t = 0, v0b = BIT_UNKNOWN, rem2;
 	DecodeForLoop *dfl = &s->floop[s->floopDepth];
 	if (s->flagD != 0) { s->err = 1; return; } // 未実装.
 	dfl->r = fcode_getReg(s, 0, 1); // reg.
@@ -794,7 +853,10 @@ void fcode_ope06(DecodeFcodeStr *s)
 	dfl->v1t = s->getIntTyp;
 	if (v0t == 0 && dfl->v1t == 0 && v0v > dfl->v1v)
 		dfl->step = -1;
-	fcode_putRemark2(s, s->getIntOrg);
+	rem2 = s->getIntOrg;
+	if (dfl->v1t != 0)
+		rem2 = 0x80520000 | dfl->v1v;
+	fcode_putRemark2(s, rem2);
 	dfl->bit = MIN(s->getIntBit, v0b);
 	if (dfl->bit == BIT_UNKNOWN) {
 		if (v0t != 0)
@@ -837,32 +899,114 @@ void fcode_ope07(DecodeFcodeStr *s)
 
 void fcode_ope08(DecodeFcodeStr *s)
 {
-	int p, typ, i, r;
+	int p, typ, i, r, ofs = 0, ofsTyp = 0;
 	p = fcode_getReg(s, 1, 0);
 	typ = s->pxxTyp[p];
 	if (typ == PTR_TYP_NULL || s->flagD != 0)
-		typ = hh4ReaderGetUnsigned(&s->hh4r);
+		s->pxxTyp[p] = typ = hh4ReaderGetUnsigned(&s->hh4r);
 	i = hh4ReaderGetUnsigned(&s->hh4r);
-	if (i != 0) {
-		s->err = 1;
-		goto fin;
+	if (i == 1) {
+		ofs = fcode_getInteger(s, len3table14);
+		ofsTyp = s->getIntTyp;
 	}
 	s->getRegBit = 32;
 	r = fcode_getReg(s, 0, MODE_REG_LC3);
-	fcode_putOpecode1(s, 0x88);
-	fcode_putP(s, p);
-	fcode_putTyp(s, typ);
-	fcode_putOpecode1(s, 0xf0);
-	fcode_putR(s, r);
- 	fcode_putBit(s, s->getRegBit);
-	if (s->flag4 == 0) {
-		fcode_putLimm(s, 32, 0x3f, 1);
-		fcode_putPadd(s, 32, p, typ, p, 0x3f);
+	if (i == 0) {
+		fcode_putOpecode1(s, 0x88);
+		fcode_putP(s, p);
+		fcode_putTyp(s, typ);
+		fcode_putInt32(s, 0);
+		fcode_putR(s, r);
+ 		fcode_putBit(s, s->getRegBit);
+		if (s->flag4 == 0) {
+			fcode_putLimm(s, 32, 0x3f, 1);
+			fcode_putPadd(s, 32, p, typ, p, 0x3f);
+		}
+		s->flagD = s->flag4 = 0;
+		fcode_updateRep(s, 0, r);
+		fcode_updateRep(s, 1, p);
+		s->bitR[r] = s->getRegBit;
+		goto fin;
 	}
-	s->flagD = s->flag4 = 0;
-	fcode_updateRep(s, 0, r);
-	fcode_updateRep(s, 1, p);
-	s->bitR[r] = s->getRegBit;
+	if (i == 1 && s->flag4 == 0) {
+		if (ofsTyp == 0) {
+			fcode_putLimm(s, 32, 0x3f, ofs);
+			ofs = 0x3f;
+		}
+		fcode_putPadd(s, 32, 0x3f, typ, p, ofs);
+		fcode_putOpecode1(s, 0x88);
+		fcode_putP(s, 0x3f);
+		fcode_putTyp(s, typ);
+		fcode_putInt32(s, 0);
+		fcode_putR(s, r);
+ 		fcode_putBit(s, s->getRegBit);
+		s->flagD = 0;
+		if (ofs != 0x3f)
+			fcode_updateRep(s, 0, ofs);
+		fcode_updateRep(s, 0, r);
+		fcode_updateRep(s, 1, p);
+		s->bitR[r] = s->getRegBit;
+		goto fin;
+	}
+	s->err = 1;
+fin:
+	return;
+}
+
+void fcode_ope09(DecodeFcodeStr *s)
+{
+	int p, typ, i, r, ofs = 0, ofsTyp = 0, regBit;
+	s->getRegBit = 32;
+	r = fcode_getReg(s, 0, 0);
+	regBit = s->getRegBit;
+	p = fcode_getReg(s, 1, 0);
+	typ = s->pxxTyp[p];
+	if (typ == PTR_TYP_NULL || s->flagD != 0)
+		s->pxxTyp[p] = typ = hh4ReaderGetUnsigned(&s->hh4r);
+	i = hh4ReaderGetUnsigned(&s->hh4r);
+	if (i == 1) {
+		ofs = fcode_getInteger(s, len3table14);
+		ofsTyp = s->getIntTyp;
+	}
+	if (i == 0) {
+		fcode_putOpecode1(s, 0x89);
+		fcode_putR(s, r);
+ 		fcode_putBit(s, regBit);
+		fcode_putP(s, p);
+		fcode_putTyp(s, typ);
+		fcode_putInt32(s, 0);
+		if (s->flag4 == 0) {
+			fcode_putLimm(s, 32, 0x3f, 1);
+			fcode_putPadd(s, 32, p, typ, p, 0x3f);
+		}
+		s->flagD = s->flag4 = 0;
+		fcode_updateRep(s, 0, r);
+		fcode_updateRep(s, 1, p);
+		s->bitR[r] = regBit;
+		goto fin;
+	}
+	if (i == 1 && s->flag4 == 0) {
+		if (ofsTyp == 0) {
+			fcode_putLimm(s, 32, 0x3f, ofs);
+			ofs = 0x3f;
+		}
+		fcode_putPadd(s, 32, 0x3f, typ, p, ofs);
+		fcode_putOpecode1(s, 0x89);
+		fcode_putR(s, r);
+ 		fcode_putBit(s, regBit);
+		fcode_putP(s, 0x3f);
+		fcode_putTyp(s, typ);
+		fcode_putInt32(s, 0);
+		s->flagD = 0;
+		if (ofs != 0x3f)
+			fcode_updateRep(s, 0, ofs);
+		fcode_updateRep(s, 0, r);
+		fcode_updateRep(s, 1, p);
+		s->bitR[r] = regBit;
+		goto fin;
+	}
+	fprintf(stderr, "fcode_ope09: Internal error.\n");
+	s->err = 1;
 fin:
 	return;
 }
@@ -1118,6 +1262,25 @@ void fcode_api0009(DecodeFcodeStr *s)
 	return;
 }
 
+void fcode_api000d(DecodeFcodeStr *s)
+// api_inkey(opt).
+{
+	int r;
+	fcode_putRemark1(s);
+	fcode_putLimm(s, 16, 0x30, 0x000d);
+	fcode_putLimmOrCp(s, 16, 0x31); // opt.
+	fcode_putPcallP2f(s);
+	r = fcode_getReg(s, 0, MODE_REG_LC3);
+	fcode_putCp(s, 32, r, 0x30);
+	fcode_updateRep(s, 0, 0x32);
+	fcode_updateRep(s, 0, 0x31);
+	fcode_updateRep(s, 0, r);
+	s->bitR[0x30] = 32;
+	s->bitR[0x31] = 32;
+	s->bitR[0x32] = 32;
+	return;
+}
+
 void fcode_api0010(DecodeFcodeStr *s)
 // api_openWin(xsiz, ysiz).
 {
@@ -1152,7 +1315,8 @@ int fcode_getInstrLength(const unsigned char *p)
 	if (ope == 0xf2) len = 1 + 6 + 1 + 6; // putLimm
 	if (ope == 0xf3) len = 1 + 6 + 1;	// putPlimm
 	if (ope == 0xf4) len = 1 + 1;	// putCnd
-	if (ope == 0x88) len = 1 + 1 + 6 + 1 + 1 + 6;	// ope08
+	if (ope == 0x88) len = 1 + 1 + 6 + 6 + 1 + 6;	// ope08
+	if (ope == 0x89) len = 1 + 1 + 6 + 1 + 6 + 6;	// ope09
 	if (ope == 0x8e) len = 1 + 1 + 6 + 1 + 6 + 1;	// putPadd
 	if (0x90 <= ope && ope <= 0x9b && ope != 0x97)
 		len = 1 + 3 + 6;	// putAlu
@@ -1165,6 +1329,7 @@ int fcode_getInstrLength(const unsigned char *p)
 		getTypSize(i, &typSize0, &typSize1, &typSign);
 		len = 1 + 6 + 6 + (typSize0 * j / 8);
 	}
+	if (ope == 0xb2) len = 16;
 	if (0xbc <= ope && ope <= 0xbd) len = 37;
 	if (ope == 0xfc && p[1] == 0xfd) len = 9;
 	if (ope == 0xfc && p[1] == 0xfe) {

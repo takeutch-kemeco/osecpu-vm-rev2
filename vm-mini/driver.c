@@ -428,7 +428,60 @@ NSApplication* app;
   CGColorSpaceRelease(colorSpace);
   CGImageRelease(image);
 }
+
+// inkey support by ???, 2014.07.15. thanks!
+
+// キー入力．
+// このメソッドが呼ばれるためには，
+// このビューがWindowのFirst Responderで無ければならない.
+- (void)keyDown:(NSEvent *)theEvent {
+  if ([[theEvent characters] length] <= 0) {
+    return;
+  }
+   
+  // ここでcはキーコードなどでは無く，生成された文字．
+  // そのため，OSのキーマップに依存する可能性がある．
  
+  unichar c = [[theEvent characters] characterAtIndex:0];
+  NSUInteger flags = [NSEvent modifierFlags];
+ 
+  // default;
+  int result = c; // i
+  int modif  = 0;  // j
+ 
+  if (c == ' ')  { result = ' '; }
+  if (c == '\r') { result = KEY_ENTER; }
+  if (c == '\e') { result = KEY_ESC; }
+  if (c == 127)  { result = KEY_BACKSPACE; }
+  if (c == '\t') { result = KEY_TAB; }
+   
+  if (c == NSPageUpFunctionKey) { result = KEY_PAGEUP; }
+  if (c == NSPageDownFunctionKey) { result = KEY_PAGEDWN; }
+  if (c == NSEndFunctionKey) { result = KEY_END; }
+  if (c == NSHomeFunctionKey) { result = KEY_HOME; }
+   
+  if (c == NSLeftArrowFunctionKey) { result = KEY_LEFT; }
+  if (c == NSRightArrowFunctionKey) { result = KEY_RIGHT; }
+  if (c == NSUpArrowFunctionKey) { result = KEY_UP; }
+  if (c == NSDownArrowFunctionKey) { result = KEY_DOWN; }
+   
+  if (c == NSDeleteFunctionKey) { result = KEY_DEL; }
+
+  // Cocoaフレームワークでは，修飾キーの右左を区別するやつが見当たらなかったです.
+  if (flags & NSShiftKeyMask) { modif |= 1 << 16; }
+  if (flags & NSControlKeyMask) { modif |= 1 << 17; }
+
+  if (('A' <= result && result <= 'Z') || ('a' <= result && result <= 'z')) {
+    if (modif != 0) {
+      result |= modif;
+      result &= ~0x20; // 大文字にしている.
+    }
+  }
+
+  putKeybuf(result);
+//  NSLog(@"char = %d, flags = %x", result, modif);
+}
+
 @end
 
 @interface Main : NSObject<NSWindowDelegate> {
@@ -489,6 +542,10 @@ winClosed : (char *)_winClosed;
 
 	_view = [[OSECPUView alloc] initWithFrame:NSMakeRect(0,0,sx,sy) buf:buf sx:sx sy:sy];
 	[window.contentView addSubview:_view];
+
+  // inkey support by ???, 2014.07.15. thanks!
+  // First Responderが入力の責任を持つ.
+  [window makeFirstResponder:_view];
 }
 
 - (void)flushWin : (NSRect) rect

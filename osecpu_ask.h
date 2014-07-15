@@ -47,8 +47,8 @@
 #define api_drawStringHex6_2(mod, c, xsiz, ysiz, x0, y0, s, reg0, width0, opt0, reg1, width1, opt1)	REM01(); R30=0x0006; REM09(1); R31=mod; R32=c; R33=xsiz; R34=ysiz; R35=x0; R36=y0; REM38(6,0,T_UINT8,R37,P31); DB%(s,0x00); REM38(1,3,T_SINT32,R38,P32); DDBE(8,0,width0,opt0,API_REG+(reg0&0x3f),0,width1,opt1,API_REG+(reg1&0x3f)); R39=0; R3A=0; PCALL(P2F)
 #define api_drawStringHex_2(mod, c, xsiz, ysiz, x0, y0, s, reg0, width0, opt0, reg1, width1, opt1)	api_drawStringHex6_2(mod, c, xsiz, ysiz, x0, y0, s, reg0, width0, opt0, reg1, width1, opt1)
 
-#define api_malloc(_p, typ, len)					R3A=len; R3B=typ; DB(0xb2); r(R3B); bit(32); r(R3A); bit(32); DB((_p&0x3f)+0x80)
-#define api_malloc_initInt(_p, typ, len, v0)		R3A=len; R3B=typ; DB(0xb2); r(R3B); bit(32); r(R3A); bit(32); DB((_p&0x3f)+0x80); P3B=_p; R39=v0;for(R3B=0;R3B!=R3A;R3B++){SMEM0PP(32, R39, typ, P3B);}
+#define api_malloc(_p, typ, len)					R3B=typ; R3A=len; DB(0xb2); r(R3B); bit(32); r(R3A); bit(32); DB((_p&0x3f)+0x80)
+#define api_malloc_initInt(_p, typ, len, v0)		R3B=typ; R3A=len; DB(0xb2); r(R3B); bit(32); r(R3A); bit(32); DB((_p&0x3f)+0x80); P3B=_p; R39=v0; R3B=0; lbstk2(0,1); LB(2, lbstk1(0,0)); SMEM0PP(32, R39, typ, P3B); R3B++; CMPE(32, 32, R3F, R3A, R3B); CND(R3F); PLIMM(P3F, lbstk1(0,0)); lbstk3(0)
 
 #define API_REG		0x80520000
 
