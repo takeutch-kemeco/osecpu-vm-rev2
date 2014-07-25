@@ -2,15 +2,15 @@
 
     Int32s x:R00, y:R01, vx:R02, vy:R03, tx:R04, ty:R05;
 
-    x = 32; y = 0; vx = 8; vy = 8;
+    x = 32; y = 0; REM34(); vx = 8; vy = 8;
     for (;;) {
     	api_openWin(320, 240);
-        tx = x + vx; ty = y + vy;
+        REM36(); tx = x + vx; ty = y + vy;
         if (tx < 0       ) { vx *= -1; }
         if (tx > 320 - 16) { vx *= -1; }
         if (ty < 0       ) { vy *= -1; }
         if (ty > 240 - 16) { vy *= -1; }
-        x += vx; y += vy;
+        REM36(); x += vx; y += vy;
         api_fillOval(MODE_COL3, 7, 16, 16, x, y); // É{Å[ÉãÇï`Ç≠.
         api_sleep(0, 100);
     }

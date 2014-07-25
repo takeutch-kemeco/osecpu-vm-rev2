@@ -175,20 +175,20 @@ int main(int argc, const UCHAR **argv)
 			 "      osectols tool:getint exp:expression [flags:#]\n"
 			 "      osectols tool:osastr str:string\n"
 			 "      osectols tool:binstr str:string\n"
-			 "  aska   ver.0.21\n"//122
+			 "  aska   ver.0.22\n"//123
 			 "  prepro ver.0.01\n"
 			 "  lbstk  ver.0.04\n"//117
-			 "  db2bin ver.0.20\n"//119
+			 "  db2bin ver.0.22\n"//123
 			 "  disasm ver.0.02\n"
-			 "  appack ver.0.24\n"//122
+			 "  appack ver.0.25\n"//123
 			 "  maklib ver.0.01\n"
 			 "  getint ver.0.06\n"
 			 "  osastr ver.0.00\n"
 			 "  binstr ver.0.00\n"
 		//	 "  fcode  ver.0.00\n"
 			 "  b32    ver.0.01\n"  //118
-			 "  dumpbk ver.0.02\n"  //122
-			 "  dumpfr ver.0.01"  //122
+			 "  dumpbk ver.0.03\n"  //123
+			 "  dumpfr ver.0.02"  //123
 
 		);
 		r = 1;
@@ -1846,7 +1846,7 @@ UCHAR *askaPass1(struct Work *w)
 					}
 				} else if (ele0[0].typ == ELEMENT_REG) {
 					sprintf(q, "CND(R%02X);JMP(CONTINUE0);", ele0[0].iValue);
-					q += 23;
+					q += 24;
 				} else {
 					q = strcpy1(q, "DB(0xef);");
 				}
@@ -2902,6 +2902,9 @@ int db2binSub2Len(const UCHAR *src)
 		if (src[2] == 0x50) i = 3; // remark-5
 		if (src[2] == 0x88 && src[3] == 0x85) i = 14; // remark-8
 		if (src[2] == 0xb4 && src[3] == 0xf0) i = 4; // remark-34
+		if (src[2] == 0xb5 && src[3] == 0xf1) i = 10; // remark-35
+		if (src[2] == 0xb6 && src[3] == 0xf0) i = 4; // remark-36
+		if (src[2] == 0xb7 && src[3] == 0xf1) i = 10; // remark-37
 		if (src[2] == 0xb8 && src[3] == 0x85) {	// remark-38
 			if (src[5] == 0x80) {	// src-mode:0	DB%(s,0x00);
 				for (i = 14; src[i] != 0x00; i++);
@@ -4708,6 +4711,16 @@ appack0_bc:
 				appack_updateRep(&aw, 0, i);
 			}
 			p += 14;
+			if (aw.vecPrfx != -1 && i != 0x3f) {
+				for (n = 1; n < aw.vecPrfx; n++) {
+					while (cmpBytes(p, "fcfd_f788#4_80") != 0)
+						p += 9;
+					p += 14;
+					appack_updateRep(&aw, 0, i + n);
+				}
+				appack_updateRep(&aw, 0, i);
+				aw.vecPrfx = -1;
+			}
 			continue;
 		}
 		if (cmpBytes(p, "f3_f788#4_b0 f3_f788#4_bf f1_f788#4_f78800000003 fcfe00") != 0) {	// CALL
@@ -4916,6 +4929,21 @@ appack0_bc:
 			appack_updateRep(&aw, 0, i);
 			appack_updateRep(&aw, 0, j);
 			p += 10;
+			if (aw.vecPrfx != -1) {
+				for (n = 1; n < aw.vecPrfx; n++) {
+					while (cmpBytes(p, "fcfd_f788#4_80") != 0)
+						p += 9;
+					p += 10;
+					if (aw.vecPrfxMode == 0)
+						appack_updateRep(&aw, 0, i);
+					if (aw.vecPrfxMode == 1)
+						appack_updateRep(&aw, 0, i + n);
+					appack_updateRep(&aw, 0, j + n);
+				}
+				appack_updateRep(&aw, 0, i);
+				appack_updateRep(&aw, 0, j);
+				aw.vecPrfx = -1;
+			}
 			continue;
 		} 
 		if (cmpBytes(p, "YxYxYxYx_f788") != 0 && 0x90 <= *p && *p <= 0x9b && *p != 0x97) {
@@ -4962,6 +4990,7 @@ appack0_bc:
 					}
 				}
 			}
+			flg4 = flgD = 0;
 			if (m == p[3]) {
 				i = m & 0x3f;
 				j = aw.immR3f;
@@ -4971,6 +5000,7 @@ appack0_bc:
 				appackSub1r(&aw, i, 0);
 				appackSub1i(&aw, j, len3table[k]);
 			} else if (m != 0xbf) {
+				flg4 = 1;
 				i = p[3] & 0x3f;
 				j = aw.immR3f;
 				if (l != 0xbf)
@@ -4981,6 +5011,7 @@ appack0_bc:
 				appackSub1i(&aw, j, len3table[k]);
 				appackSub1r(&aw, i, MODE_REG_LC3);
 			} else {
+				flgD = 1;
 				i = p[3] & 0x3f;
 				j = aw.immR3f;
 				if (l == p[3]) {
@@ -4989,6 +5020,7 @@ appack0_bc:
 					appackSub1r(&aw, i, 0);
 					appackSub1i(&aw, j, len3table[k]);
 				} else {
+					flg4 = 1;
 					appackSub1op(&aw, 0x04);
 					appackSub1op(&aw, 0x0d);
 					appackSub1op(&aw, k | 0x10);
@@ -5001,6 +5033,44 @@ appack0_bc:
 			if (l != 0xbf) appack_updateRep(&aw, 0, l & 0x3f);
 			appack_updateRep(&aw, 0, i);
 			p += 10;
+			if (aw.vecPrfx != -1) {
+				for (n = 1; n < aw.vecPrfx; n++) {
+					while (cmpBytes(p, "fcfd_f788#4_80") != 0)
+						p += 9;
+					if (cmpBytes(p, "f2_f788#4_bf_f78800000020") != 0)
+						p += 14; // R3F=?; をスキップ.
+					if (cmpBytes(p, "YxYxYxYx_f788") != 0 && 0x90 <= *p && *p <= 0x9b && *p != 0x97)
+						p += 10;
+					else {
+						fprintf(stderr, "appack0: alu: vecPrfx: error:\n");
+						exit(1);
+					}
+					if (aw.vecPrfxMode == 0) {
+						if (flg4 == 0) {
+							if (flgD == 0) {
+								appack_updateRep(&aw, 0, (m & 0x3f) + n);
+								if (l != 0xbf) appack_updateRep(&aw, 0, l & 0x3f);
+							} else {
+								if (m != 0xbf) appack_updateRep(&aw, 0, m & 0x3f);
+								appack_updateRep(&aw, 0, (l & 0x3f) + n);
+							}
+						}
+						if (flg4 != 0) {
+							if (m != 0xbf) appack_updateRep(&aw, 0, m & 0x3f);
+							if (l != 0xbf) appack_updateRep(&aw, 0, l & 0x3f);
+						}
+					}
+					if (aw.vecPrfxMode == 1) {
+						if (m != 0xbf) appack_updateRep(&aw, 0, (m & 0x3f) + n);
+						if (l != 0xbf) appack_updateRep(&aw, 0, (l & 0x3f) + n);
+					}
+					appack_updateRep(&aw, 0, i + n);
+				}
+				if (m != 0xbf) appack_updateRep(&aw, 0, m & 0x3f);
+				if (l != 0xbf) appack_updateRep(&aw, 0, l & 0x3f);
+				appack_updateRep(&aw, 0, i);
+				aw.vecPrfx = -1;
+			}
 			continue;
 		}
 		if (cmpBytes(p, "9e_Yx_Yx") != 0) {
@@ -5045,8 +5115,23 @@ appack0_bc:
 			p += 26;
 			continue;
 		}
-//		if (cmpBytes(p, "YxYxYx_f78800000020_Yx_f78800000020") != 0 && 0xa0 <= *p && *p <= 0xa7) {
-//		}
+		if (cmpBytes(p, "YxYxYx_f78800000020_Yx_f78800000020") != 0 && 0xa0 <= *p && *p <= 0xa7) {
+			appack0_waitFlush(&aw);
+			appackSub1op(&aw, 0x0d);
+			appackSub1op(&aw, *p & 0x3f);
+			appackSub1r(&aw, p[1] & 0x3f, 0);
+			if (p[2] == 0xbf)
+				appackSub1i(&aw, aw.immR3f, len3table0);
+			else
+				appackSub1i(&aw, 0x80520000 | (p[2] & 0x3f), len3table0);
+			appackSub1r(&aw, p[9] & 0x3f, 0);
+			appack_updateRep(&aw, 0, p[1] & 0x3f);
+			if (p[2] != 0xbf)
+				appack_updateRep(&aw, 0, p[2] & 0x3f);
+			appack_updateRep(&aw, 0, p[9] & 0x3f);
+			p += 16;
+			continue;
+		}
 		if (cmpBytes(p, "bd_f788#4_f788#4_f788#4_f788#4_f788#4_f788#4 9e_b0_bf") != 0) {
 			if (aw.wait3d + aw.waitEnd > 0)
 				appack0_waitFlush(&aw);
@@ -5295,6 +5380,47 @@ appack0_bc:
 			aw.vecPrfx = 2;
 			aw.vecPrfxMode = 0;
 			p += 4;
+			continue;
+		}
+		if (cmpBytes(p, "fcfeb5f1_f788#4") != 0) {
+			// REM35() : semi-vector-prefix.
+			i = p[6] << 24 | p[7] << 16 | p[8] << 8 | p[9];
+			appack0_waitFlush(&aw);
+			appackSub1op(&aw, 0x35);
+			if (3 <= i && i <= 9)
+				appackSub1u(&aw, i - 3);
+			else {
+				fprintf(stderr, "appack0: REM35: error: i=%d\n", i);
+				exit(1);
+			}
+			aw.vecPrfx = i;
+			aw.vecPrfxMode = 0;
+			p += 10;
+			continue;
+		}
+		if (cmpBytes(p, "fcfeb6f0") != 0) {
+			// REM36() : full-vector-prefix.
+			appack0_waitFlush(&aw);
+			appackSub1op(&aw, 0x36);
+			aw.vecPrfx = 2;
+			aw.vecPrfxMode = 1;
+			p += 4;
+			continue;
+		}
+		if (cmpBytes(p, "fcfeb7f1_f788#4") != 0) {
+			// REM37() : semi-vector-prefix.
+			i = p[6] << 24 | p[7] << 16 | p[8] << 8 | p[9];
+			appack0_waitFlush(&aw);
+			appackSub1op(&aw, 0x37);
+			if (3 <= i && i <= 9)
+				appackSub1u(&aw, i - 3);
+			else {
+				fprintf(stderr, "appack0: REM37: error: i=%d\n", i);
+				exit(1);
+			}
+			aw.vecPrfx = i;
+			aw.vecPrfxMode = 1;
+			p += 10;
 			continue;
 		}
 err:
@@ -7041,6 +7167,12 @@ int dumpbk(struct Work *w)
 			p += 4;
 			continue;
 		}
+		if (cmpBytes(p, "fcfe_bxf1_f788#4") != 0) {
+			i = p[ 6] << 24 | p[ 7] << 16 | p[ 8] << 8 | p[ 9];
+			printf("  fcfe_%x_f1_f788%08x\n", p[2], i);
+			p += 10;
+			continue;
+		}
 		if (cmpBytes(p, "fcfe_21_f788") != 0) {
 			i = p[ 5] << 24 | p[ 6] << 16 | p[ 7] << 8 | p[ 8];
 			printf("  fcfe_2_1_f788%08x\n", i);
@@ -7402,6 +7534,9 @@ int dumpfr(struct Work *w)
 				flag4 = 0;
 				continue;
 			}
+			dumpfr_skipHh4(&hh4r, 3);
+			flagD = 0;
+			continue;
 		}
 		if (op == 0x2e) {
 			printf("_");
@@ -7435,9 +7570,21 @@ int dumpfr(struct Work *w)
 			if (flag4 == 0 && flagD == 0)
 				continue;
 		}
+		if (op == 0x35) {
+			if (flag4 == 0 && flagD == 0) {
+				dumpfr_skipHh4(&hh4r, 1);
+				continue;
+			}
+		}
 		if (op == 0x36) {
 			if (flag4 == 0 && flagD == 0)
 				continue;
+		}
+		if (op == 0x37) {
+			if (flag4 == 0 && flagD == 0) {
+				dumpfr_skipHh4(&hh4r, 1);
+				continue;
+			}
 		}
 		if (op == 0x3c) {
 			if (flag4 == 0 && flagD == 0)

@@ -10,7 +10,8 @@ LOCALLABELS(1);
   
     for (count = 0; count != 13; count++) {
       api_openWin(768, 768);
-      ax = 256; ay = ax;  by = ay;  bx = 512; CALL(L_func); // func(256, 256, 512, 256, count);
+//      ax = 256; ay = ax;  by = ay;  bx = 512; CALL(L_func); // func(256, 256, 512, 256, count);
+      REM35(4); ax = 256; ay = 256; bx = 256; by = 256; bx = 512; CALL(L_func); // func(256, 256, 512, 256, count);
       ax = bx;  by = ax;                      CALL(L_func); // func(512, ay,  bx,  512, count);
       ay = by;  bx = 256;                     CALL(L_func); // func(ax,  512, 256, by,  count);
       ax = bx;  by = ax;                      CALL(L_func); // func(256, ay,  bx,  256, count);
@@ -31,10 +32,10 @@ beginFunc(L_func);
       // uy = (ax - bx + ay + by) / 2;
       tx = ax + by; ty = bx - ay;
       ux = tx + ty; uy = tx - ty;
-      ux /= 2; uy /= 2;
-      tx = bx; ty = by;
-      func(ax, ay, ux, uy, count);
-      func(ux, uy, tx, ty, count);
+      REM34(); ux /= 2; uy /= 2;
+      REM36(); tx = bx; ty = by;
+      REM36(); bx = ux; by = uy; CALL(L_func); // func(ax, ay, ux, uy, count);
+      REM37(4); ax = ux; ay = uy; bx = tx; by = ty; CALL(L_func); // func(ux, uy, tx, ty, count);
     } else {
       // count = -1;
       api_drawLine(MODE_COL3, count, ax, ay, bx, by);
