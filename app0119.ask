@@ -1,0 +1,13 @@
+#include "osecpu_ask.h"
+
+    Int32s x:R01, y:R02, c:R00;
+
+    api_openWin(256, 256);
+	REM34();
+	for (x = 0; x != 256; x++) {
+		for (y = 0; y != 256; y++) {
+			c = x ^ y;
+			c *= 0x10101;
+			api_drawPoint(MODE_COL24, c, x, y);
+		}
+	}

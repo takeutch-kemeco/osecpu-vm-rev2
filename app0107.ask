@@ -10,8 +10,8 @@
 LOCALLABELS(8);
 
 	SInt32 i:R00, j:R01, k:R02;
-	SInt32 score:R15, high:R09, point:R0A, movewait0:R0B, fx:R0C, laserwait:R0D, lx:R0E, ly:R06;
-	SInt32 ix:R10, iy:R11, movewait:R12, idir:R13, invline:R14, waitUint:R18;
+	SInt32 score:R07, high:R08, point:R09, movewait0:R0A, fx:R0B, laserwait:R0C, lx:R0D, ly:R0E;
+	SInt32 ix:R0F, iy:R10, movewait:R11, idir:R12, invline:R13, waitUint:R14;
 	VPtr invstr:P01;
 
 	api_malloc_initInt(invstr, T_UINT4, 32 * 6, 0);
@@ -45,8 +45,7 @@ LB0(L_next_group);
 	invline = 5;
 	for (i = 0; i != 6; i++) {
 		for (j = 0; j != 26; j++) {
-			k = i * 32;
-			k += j;
+			/* AFFINE(32, k, 32, i, j); */		k = i * 32; k += j;
 			R03 = j % 5;
 			PASMEM0(32, R03, T_UINT4, invstr, k);
 		}
@@ -62,27 +61,24 @@ LB0(L_next_group);
 //		api_fillRect(MODE_COL3, 0, -1, -1, 0, 0);
 		api_openWin(324, 228);
 //		api_drawStringDec_2(MODE_COL3, -1, 1, 1,  4 * 8 + 2, 0 * 16 + 2, 'SCORE:\1    HIGH:\1', score, 8, 2, high,  8, 2);
-		R04 = fx; R05 = 13; PLIMM(P02, L_fighter); R03 = 3; /* PAD(); */ R08 = 6; CALL(L_putchar);
+		R04 = fx; R05 = 13; PLIMM(P02, L_fighter); R03 = 3; /* PAD(); */ R06 = 6; CALL(L_putchar);
 
 		for (i = 0; i != 6; i++) {
 			for (j = 0; j != 26; j++) {
-				k = i * 32;
-				k += j;
+				/* AFFINE(32, k, 32, i, j); */		k = i * 32; k += j;
 				PALMEM0(32, R03, T_UINT4, invstr, k);
 				if (R03 == 1) {
 					R04 = j + ix; R05 = i + iy;
 					PLIMM(P02, L_invader);
 					R03 = 4;
-					R08 = 2; // PAD();
+					R06 = 2; // PAD();
 					CALL(L_putchar);
 				}
 			}
 		}
 		if (ly != 0) {
-			i = lx * 8;
-			i += 2 + 3;
-			j = ly * 16;
-			j += 2 + 1;
+			/* AFFINEI(32, i,  8, lx, 2 + 3); */ 	i = lx * 8; i += 2 + 3;
+			/* AFFINEI(32, j, 16, ly, 2 + 1); */	j = ly * 16; j += 2 + 1;
 			api_fillRect(MODE_COL3, 3, 2, 14, i, j);
 		}
 
@@ -90,14 +86,13 @@ LB0(L_next_group);
 		do {
 			i = 0;
 			for (j = 0; j != 26; j++) {
-				k = invline * 32;
-				k += j;
+				/* AFFINE(32, k, 32, invline, j); */	k = invline * 32; k += j;
 				PALMEM0(32, R03, T_UINT4, invstr, k);
 				i |= R03;
 			}
 			if (i != 0) break;
 			invline--;
-			if (invline != -1) continue;
+			if (invline != -1) continue0;
 			i = movewait0 / 3;
 			movewait0 -= i;
 			api_sleep(0, 1024);
@@ -122,7 +117,7 @@ LB0(L_next_group);
 					ly = 13;
 				}
 			}
-			if (i >= 0) continue;
+			if (i >= 0) continue0;
 		}
 
 		// Ž©‹@‚ÌˆÚ“®.
@@ -151,8 +146,7 @@ LB0(L_next_group);
 			if (k <= 5) {
 				if (j >= 0) {
 					if (j <= 24) {
-						k *= 32;
-						k += j;
+						/* AFFINE(32, k, 32, k, j); */	k *= 32; k += j;
 						PALMEM0(32, R03, T_UINT4, invstr, k);
 						if (R03 != 0) { // hit!
 							k -= R03;
@@ -189,7 +183,7 @@ LB0(L_next_group);
 					do {
 						api_sleep(0, waitUint);
 						api_inkey(i, 0);
-						if (i != 10) continue;
+						if (i != 10) continue0;
 					}
 					goto restart;
 				}
@@ -203,18 +197,17 @@ LB0(L_next_group);
 
 beginFunc(L_putchar);
 	do {
-		SInt32 x:R00, y:R01, c:R02, xsiz:R03, x0:R04, y0:R05, x1:R06, y1:R07;
+		SInt32 x:R00, y:R01, c:R02, xsiz:R03, x0:R04, y0:R05, col:R06, x1:R07, y1:R08;
 		xsiz <<= 3;
 		
 		for (y1 = 2; y1 != 18; y1++) {
 			y = y0 * 16;
 			y += y1; // PAD();
 			for (x1 = 0; x1 != xsiz; x1++) {
-				x = x0 * 8;
-				x += x1;
+                /* AFFINE(32, x, 8, x0, x1); */		x = x0 * 8; x += x1;
 				x += 2;
 				LMEM0PP(32, c, T_UINT1, P02);
-				c *= R08;
+				c *= col;
 				api_drawPoint(MODE_COL3, c, x, y);
 			}
 		}

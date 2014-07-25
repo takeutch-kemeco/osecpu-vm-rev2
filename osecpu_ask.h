@@ -95,6 +95,9 @@
 #define PAPLMEM0(preg0, typ32, preg1, reg1)		PAPLMEM(preg0, typ32, preg1, reg1, 0)
 #define PAPSMEM0(preg0, typ32, preg1, reg1)		PAPSMEM(preg0, typ32, preg1, reg1, 0)
 
+#define AFFINE(bt, r0, a, r1, r2)					LIMM(bt, R3F, a); DB(0x96,(r1&0x3f)|0x80); r(R3F); r(R3E); bit(bt); DB(0x94); r(R3E); DB((r2&0x3f)|0x80); DB((r0&0x3f)|0x80); bit(bt)
+#define AFFINEI(bt, r0, a, r1, b)					LIMM(bt, R3F, a); DB(0x96,(r1&0x3f)|0x80); r(R3F); r(R3E); bit(bt); LIMM(bt, R3F, b); DB(0x94); r(R3E); r(R3F); DB((r0&0x3f)|0x80); bit(bt) 
+
 #define OPSWP(...)									DB(0xff, 0x00, 0xff, __VA_ARGS__, 0)	// 2å¬Ç∏Ç¬èëÇ≠. ëÂÇ´Ç¢ï˚Ç©ÇÁèëÇ≠.
 
 #define beginFunc0(label, r1, bit0, p1, f1, bit1, _typ)	GLB(label); DB(0xbc); imm(r1); bit(bit0); imm(p1); imm(f1); bit(bit1); typ(_typ)

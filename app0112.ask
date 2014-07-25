@@ -17,7 +17,7 @@ LOCALLABELS(1);
 				api_drawPoint(MODE_COL3, c, x, y);
 			}
 		}
-	}  
+	}
 
 DAT_SA(L_invader, T_UINT1, 32 * 16);
 	D1B(0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0);

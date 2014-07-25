@@ -1,0 +1,43 @@
+#include "osecpu_ask.h"
+
+#define L_func      LOCAL(0)
+LOCALLABELS(1);
+
+#define func(x1, y1, x2, y2, c)  R00=c; R01=x1; R02=y1; R03=x2; R04=y2; CALL(L_func);
+  // main
+  do {
+    Int32s ax:R01, ay:R02, bx:R03, by:R04, count:R00;
+  
+    for (count = 0; count != 13; count++) {
+      api_openWin(768, 768);
+      ax = 256; ay = ax;  by = ay;  bx = 512; CALL(L_func); // func(256, 256, 512, 256, count);
+      ax = bx;  by = ax;                      CALL(L_func); // func(512, ay,  bx,  512, count);
+      ay = by;  bx = 256;                     CALL(L_func); // func(ax,  512, 256, by,  count);
+      ax = bx;  by = ax;                      CALL(L_func); // func(256, ay,  bx,  256, count);
+      api_sleep(0, 1024);
+    }
+  }
+  api_end();
+
+beginFunc(L_func);
+  do {
+    Int32s ax:R01, ay:R02, bx:R03, by:R04, count:R00;
+    Int32s ux:R05, uy:R06, tx:R07, ty:R08;
+    
+    count--;
+
+    if (count >= 0) {
+      // ux = (by - ay + ax + bx) / 2;
+      // uy = (ax - bx + ay + by) / 2;
+      tx = ax + by; ty = bx - ay;
+      ux = tx + ty; uy = tx - ty;
+      ux /= 2; uy /= 2;
+      tx = bx; ty = by;
+      func(ax, ay, ux, uy, count);
+      func(ux, uy, tx, ty, count);
+    } else {
+      // count = -1;
+      api_drawLine(MODE_COL3, count, ax, ay, bx, by);
+    }
+  }
+endFunc();

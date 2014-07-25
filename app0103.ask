@@ -17,11 +17,11 @@ DAT_END();
 	Int32s col:R00, x0:R01, y0:R02, x1:R03, y1:R04, i:R05, j:R06;
 
 	for (i = 0; i != 15; i++) {
-		LMEM0PP(32, R01, T_UINT8, P01); LMEM0PP(32, R02, T_UINT8, P01); // x0, y0.
+		REM34(); LMEM0PP(32, R01, T_UINT8, P01); LMEM0PP(32, R02, T_UINT8, P01); // x0, y0.
 		PLIMM(P02, L_POINT);
 		for (j = -8; j != 8; j++) {
 			col = i - j;
-			LMEM0PP(32, R03, T_UINT8, P02); LMEM0PP(32, R04, T_UINT8, P02); // x1, y1.
+			REM34(); LMEM0PP(32, R03, T_UINT8, P02); LMEM0PP(32, R04, T_UINT8, P02); // x1, y1.
 			if (col <= 0) { col = 1 - col; }
 			if (col <= 7) {
 				api_drawLine(MODE_OR, col, x0, y0, x1, y1);

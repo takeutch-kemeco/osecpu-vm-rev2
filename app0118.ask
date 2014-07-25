@@ -1,0 +1,11 @@
+#include "osecpu_ask.h"
+
+	Int32s c:R00, x:R01, y:R02;
+//	c = 0;
+	REM34();
+	for (x = 0; x != 256; x++) {
+		for (y = 0; y != 256; y++) {
+			api_drawPoint(MODE_COL24, c, x, y);
+			c += 0x100; // 00xxyy00
+		}
+	}

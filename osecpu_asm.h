@@ -24,11 +24,12 @@
 #define	PCMPJNE(reg1, reg2, label)		PCMPNE(R3F, reg1, reg2); CND(R3F); JMP(label)
 #define	PCMPJE(reg1, reg2, label)		PCMPE (R3F, reg1, reg2); CND(R3F); JMP(label)
 
-#define LOOP()   	  					lbstk2(0,2); LB0(lbstk1(0,0))
-#define CONTINUE						lbstk1(0,0)
-#define BREAK							lbstk1(0,1)
+#define LOOP()   	  					lbstk2(0,3); LB0(lbstk1(0,0))
+#define CONTINUE0						lbstk1(0,0)
+#define CONTINUE						lbstk1(0,1)
+#define BREAK							lbstk1(0,2)
 #define ENDLOOP0()						lbstk3(0)					/* BREAKを使わない場合用 */
-#define ENDLOOP()						LB0(lbstk1(0,1)); lbstk3(0)	/* BREAKを使う場合用 */
+#define ENDLOOP()						LB0(lbstk1(0,2)); lbstk3(0)	/* BREAKを使う場合用 */
 #define SWITCH()						lbstk2(0,2)
 #define ENDSWITCH()						LB0(lbstk1(0,1)); lbstk3(0)	/* BREAKを使う場合用 */
 #define	GLOBALLABELS(n)					lbstk0(n)
