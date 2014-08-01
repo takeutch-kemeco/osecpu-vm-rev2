@@ -2,6 +2,6 @@
 
 	Int32s c:R00;
 
-	for (c = 0x20; c != 0x80; c++) {
+	for (c = 0x20; c != 0x7f; c++) {
 		api_putcharRxx(c);
 	}

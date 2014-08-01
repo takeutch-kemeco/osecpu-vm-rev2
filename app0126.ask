@@ -1,0 +1,83 @@
+#include "osecpu_ask.h"
+
+	Int32s col:R00, x:R01, y:R02, mode:R03, n:R04;
+	Int32s sx:R05, sy:R06, sn:R07; // オーバーサンプリング用.
+
+#define MAX	447	// 511
+
+#define zx	F02
+#define zy	F03
+#define cx	F04
+#define cy	F05
+#define xx	F06
+#define yy	F07
+#define tx	F08
+#define ty	F09
+#define cx0	F00	
+#define	cy0	F01
+#define st0	F0A
+#define st	F0B
+
+
+	REM1C0();
+	api_openWin(1024, 768);
+	for (y = 0; y != 768; y++) {
+		for (x = 0; x != 1024; x++) {
+			mode = MODE_COL24;
+			R04 = R01 + R02;
+			CMPNEI(32, 32, R04, R04, 0); // R04は最初以外のとき-1.
+			REM36();
+			CNVIF(64, 32, F00, R01);
+			CNVIF(64, 32, F01, R02); // ここまで1C0マクロ.
+
+			FLIMM1(64, st0, 0x7, 0x100000);
+		//	FLIMM1(64, st,  0x7, 0x100000 * 4);
+			FLIMM0(64, F3F, 4); FDIV(64, st, st0, F3F);
+			REM34();
+			FMUL(64, cx0, cx0, st0);
+			FMUL(64, cy0, cy0, st0);
+			FLIMM1(64, cx, 0x4750, 0x10000);
+			FADD(64, cx, cx, cx0);
+			sn = 0;
+			for (sx = 0; sx != 4; sx++) {
+				FADD(64, cx, cx, st);
+				FLIMM1(64, cy, -0x1E8, 0x10000);
+				FSUB(64, cy, cy, cy0);
+				for (sy = 0; sy != 4; sy++) {
+					FSUB(64, cy, cy, st);
+					REM34();
+					FLIMM0(64, zx, 0);
+            		FLIMM0(64, zy, 0);
+					for (n = 0; n != MAX; n++) {
+						REM36();
+						FMUL(64, xx, zx, zx);
+                		FMUL(64, yy, zy, zy);
+                		FADD(64, tx, xx, yy);
+						FLIMM0(64, F3F, 4);
+						FCMPG(32, 64, R3F, tx, F3F); CND(R3F); break;
+						FSUB(64, tx, xx, yy);
+						FMUL(64, ty, zx, zy);
+						FADD(64, ty, ty, ty);
+						REM36();
+						FADD(64, zx, tx, cx);
+						FADD(64, zy, ty, cy);
+            		}
+					sn += n;
+				}
+			}
+			n = sn / 16;
+			col = 0;
+			if (n != MAX) {
+			//	col = n - 255;
+            //  col += 0xff00;
+				col = n + 0xfe01;
+                if (n < 256) {
+                	col = n << 8;
+                }
+            }
+            col <<= 8;
+			REM1C0();
+            api_drawPoint(mode, col, x, y);
+        }
+    }
+

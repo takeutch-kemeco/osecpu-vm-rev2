@@ -1,0 +1,47 @@
+#include "osecpu_ask.h"
+
+	Int32s i:R00, fsiz:R01, j:R02, c:R03, tmp:R04;
+	VPtr p:P01;
+
+	api_putString(' offset  ');
+	for (i = 0; i != 16; i++) {
+		api_putStringHex(' +\1', i, 1, 0);
+	}
+	api_putString('  ');
+	for (i = 0x10; i != 0x20; i++) {
+		api_putcharRxx(i);
+	}
+	api_putString('\n');
+	for (i = 0; i != 75; i++) {
+		api_putString('-');
+	}
+
+	junkApi_fileRead(fsiz, p, 1);
+
+//	j = 0;
+	do {
+		api_putStringHex('\n\1 ', j, 8, 2);
+		for (i = 0; i != 16; i++) {
+			tmp = i + j;
+			if (tmp < fsiz) {
+				PALMEM0(32, c, T_UINT8, p, i);
+				api_putStringHex(' \1', c, 2, 2);
+			} else {
+				api_putString('   ');
+			}
+		}
+		api_putString(' ');
+		for (i = 0; i != 16; i++) {
+			c = 0x20;
+			tmp = i + j;
+			if (tmp < fsiz) {
+				LMEM0PP(32, c, T_UINT8, p);
+				if (c <  0x20) { c = 0x2e; }
+				if (c >= 0x7f) { c = 0x2e; }
+			}
+			api_putcharRxx(c);
+		}
+		j += 16;
+		if (j < fsiz) continue0;
+	}
+

@@ -134,3 +134,14 @@
   cfe-8-5-(fcode-mode)-(src-mode)-(typ)-(Rxx)-(Pxx) : REM08(ARRAY_PARAM)
   cfe-9-1-(fcode-mode) : REM9
 
+2014.07.28月:
+  カラー指定にグレイスケールを導入したい。
+  modeフラグを活用したい。
+  bit0-1: 色深度選択
+  bit2-3: SET/OR/XOR/AND
+  bit4: clipping
+  bit5: fill/draw
+  bit8: gray-scale
+  bit9-11:gray-scale-color
+  bit8が1で、bit0-1が0だと、3に補正される。
+

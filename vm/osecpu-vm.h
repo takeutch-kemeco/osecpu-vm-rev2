@@ -123,6 +123,7 @@ int jitcAll(OsecpuJitc *jitc);
 #define JITC_BAD_PREFIX			17
 #define JITC_UNSUPPORTED		18
 #define JITC_BAD_ENTER			19
+#define JITC_DIVISION_BY_ZERO	20
 
 int execStep(OsecpuVm *r); // ŒŸØÏ‚İ‚ÌOSECPU–½—ß‚ğˆê‚Â‚¾‚¯Às‚·‚é.
 int execAll(OsecpuVm *vm);

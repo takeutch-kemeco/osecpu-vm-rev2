@@ -7,12 +7,14 @@ typedef struct _ApiWork {
 	char winClosed, autoSleep;
 	jmp_buf setjmpErr;
 	unsigned char lastConsoleChar;
+	int argc;
+	const unsigned char **argv;
 } ApiWork;
 
 static ApiWork apiWork;
 
 const Int32 *apiEntry(OsecpuVm *vm);
-void apiInit(OsecpuVm *vm);
+void apiInit(OsecpuVm *vm, int argc, const unsigned char **argv);
 void apiEnd(OsecpuVm *vm, Int32 retcode);
 
 #define BUFFER_SIZE		1024 * 1024	// 1M
@@ -70,7 +72,7 @@ int OsecpuMain(int argc, const unsigned char **argv)
 	vm.ip  = j32buf;
 	vm.ip1 = jitc.dst;
 
-	apiInit(&vm);
+	apiInit(&vm, argc - 1, &argv[1]);
 	rc = execAll(&vm);
 	if (rc != EXEC_SRC_OVERRUN) {
 		fprintf(stderr, "execAll()=%d, DR0=%d\n", rc, vm.dr[0]); // EXEC_SRC_OVERRUNÇ»ÇÁê¨å˜.
@@ -88,7 +90,7 @@ void drv_sleep(int msec);
 extern int *vram, v_xsiz, v_ysiz;
 extern int *keybuf, keybuf_r, keybuf_w, keybuf_c;
 
-void apiInit(OsecpuVm *vm)
+void apiInit(OsecpuVm *vm, int argc, const unsigned char **argv)
 {
 	int i, j;
 	for (i = 0; i <= 0x3f; i++) {
@@ -108,6 +110,8 @@ void apiInit(OsecpuVm *vm)
 	apiWork.winClosed = 0;
 	apiWork.autoSleep = 0;
 	apiWork.lastConsoleChar = '\n';
+	apiWork.argc = argc;
+	apiWork.argv = argv;
 	keybuf_r = keybuf_w = keybuf_c = 0;
 	keybuf = malloc(KEYBUFSIZ * sizeof (int));
 	return;
@@ -125,6 +129,9 @@ void api0008_exit(OsecpuVm *vm);
 void api0009_sleep(OsecpuVm *vm);
 void api000d_inkey(OsecpuVm *vm);
 void api0010_openWin(OsecpuVm *vm);
+
+void api07c0_fileRead(OsecpuVm *vm);
+void api07c1_fileWrite(OsecpuVm *vm);
 
 const Int32 *apiEntry(OsecpuVm *vm)
 // VMÇÃçƒäJínì_Çï‘Ç∑.
@@ -154,6 +161,8 @@ const Int32 *apiEntry(OsecpuVm *vm)
 	if (func == 0x0009) { api0009_sleep(vm);		goto fin; }
 	if (func == 0x000d) { api000d_inkey(vm);		goto fin; }
 	if (func == 0x0010) { api0010_openWin(vm);		goto fin; }
+	if (func == 0x07c0) { api07c0_fileRead(vm);		goto fin; }
+	if (func == 0x07c1) { api07c1_fileWrite(vm);	goto fin; }
 	jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
 fin: ;
 	const Int32 *retcode = NULL;
@@ -291,8 +300,11 @@ static unsigned char fontdata[] = {
 
 int apiLoadColor(OsecpuVm *vm, int rxx)
 {
-	int c = execStep_getRxx(vm, rxx, 16), m, rr, gg, bb;
-	m = execStep_getRxx(vm, 0x31, 2) & 3;
+	int c = execStep_getRxx(vm, rxx, 16), m, mm, rr, gg, bb;
+	mm = execStep_getRxx(vm, 0x31, 16);
+    if ((mm & 0x103) == 0x100) mm |= 0x03;
+	if ((mm & 0xf00) == 0x100) mm |= 0xe00;
+	m = mm & 3;
 	if (m == 0x00) {
 	//	static col3_bgr_table[8] = { 0, 4, 2, 6, 1, 5, 3, 7 };
 		if (c < -1 || c > 7)
@@ -303,6 +315,8 @@ int apiLoadColor(OsecpuVm *vm, int rxx)
 	}
 	if (m == 0x01) {
 		// 00, 24, 48, 6d, 91, b6, da, ff
+		if ((mm & 0x100) != 0)
+			c *= 1 << 6 | 1 << 3 | 1;
 		if (c < 0 || c >= (1 << 9))
 			jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
 		rr = (c >>  6) & 0x07;
@@ -320,6 +334,8 @@ int apiLoadColor(OsecpuVm *vm, int rxx)
 		// c5, cd, d5, de, e6, ee, f6, ff
 		if (c < 0 || c >= (1 << 15))
 			jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
+		if ((mm & 0x100) != 0)
+			c *= 1 << 10 | 1 << 5 | 1;
 		rr = (c >> 10) & 0x1f;
 		gg = (c >>  5) & 0x1f;
 		bb =  c        & 0x1f;
@@ -328,8 +344,13 @@ int apiLoadColor(OsecpuVm *vm, int rxx)
 		bb = (bb * 255) / 31;
 		c = rr << 16 | gg << 8 | bb;
 	}
-	if (m == 0x03)
+	if (m == 0x03) {
 		c = execStep_getRxx(vm, rxx, 32);
+		if ((mm & 0x100) != 0)
+			c *= 1 << 16 | 1 << 8 | 1;
+	}
+	if ((mm & 0x100) != 0)
+		c &= iColor1[(mm >> 9) & 7];
 	if (vm->errorCode > 0)
 		longjmp(apiWork.setjmpErr, 1);
 	return c;
@@ -764,4 +785,77 @@ void api0010_openWin(OsecpuVm *vm)
 fin:
 	return;
 }
+
+void api07c0_fileRead(OsecpuVm *vm)
+{
+	int i, fsiz;
+	FILE *fp;
+	unsigned char *fbuf = (unsigned char *) malloc(2 * 1024 * 1024 + 1); // 2MB
+//	unsigned char *bit;
+	i = execStep_getRxx(vm, 0x31, 16);
+
+	if (i <= 0) {
+err:
+		jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
+		longjmp(apiWork.setjmpErr, 1);
+	}
+	if (i >= apiWork.argc) {
+		fprintf(stderr, "api07c0_fileRead: need more file-path: i=%d, argc=%d\n", i, apiWork.argc);
+		goto err;
+	}
+	fp = fopen(apiWork.argv[i], "rb");
+	if (fp == NULL) {
+		fprintf(stderr, "api07c0_fileRead: fopen error: %s\n", apiWork.argv[i]);
+		goto err;
+	}
+	fsiz = fread(fbuf, 1, 2 * 1024 * 1024 + 1, fp);
+	fclose(fp);
+	if (fsiz > 2 * 1024 * 1024) {
+		fprintf(stderr, "api07c0_fileRead: too large file (max:2MB): %s\n", apiWork.argv[i]);
+		goto err;
+	}
+//	bit = (unsigned char *) malloc(fsiz);
+//	for (i = 0; i < fsiz; i++)
+//		bit[i] = 8;
+
+//	vm->bit[0x30] = 32;
+	vm->r[0x30] = fsiz;
+	vm->p[0x31].p = fbuf;
+//	vm->p[0x31].p0 = fbuf;
+//	vm->p[0x31].p1 = fbuf + fsiz;
+	vm->p[0x31].typ = 3; // T_UINT8
+//	vm->p[0x31].flags = EXEC_CMA_FLAG_READ; // over-seek:ok, read:ok, write:err
+//	vm->p[0x31].bit = bit;
+	return;
+}
+
+void api07c1_fileWrite(OsecpuVm *vm)
+{
+	int i, fsiz;
+	FILE *fp;
+	i = execStep_getRxx(vm, 0x31, 16);
+	fsiz = execStep_getRxx(vm, 0x32, 32);
+	if (i <= 0) {
+err:
+		jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
+		longjmp(apiWork.setjmpErr, 1);
+	}
+	if (i >= apiWork.argc) {
+		fprintf(stderr, "api07c1_fileWrite: need more file-path: i=%d, argc=%d\n", i, apiWork.argc);
+		goto err;
+	}
+	if (fsiz < 0) goto err;
+//	if (vm->p[0x31].p + fsiz > vm->p[0x31].p1) goto err;
+//	if (vm->p[0x31].p < vm->p[0x31].p0) goto err;
+	fp = fopen(apiWork.argv[i], "wb");
+	if (fp == NULL) {
+		fprintf(stderr, "api07c1_fileWrite: fopen error: %s\n", apiWork.argv[i]);
+		goto err;
+	}
+	fwrite(vm->p[0x31].p, 1, fsiz, fp);
+	fclose(fp);
+	return;
+}
+
+
 

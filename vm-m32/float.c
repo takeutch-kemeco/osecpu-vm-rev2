@@ -31,7 +31,7 @@ int jitcStepFloat(OsecpuJitc *jitc)
 		//	f = ip[3]; bit = ip[4];
 			goto fin;
 		}
-		if (ip[1] == 1) {
+		if (ip[1] == 2) {
 			ip[2] = jitc->src[1]; // imm
 			ip[3] = jitc->src[3] & 0x00ffffff; // f
 			ip[4] = jitc->src[4] & 0x00ffffff; // bit
@@ -94,7 +94,7 @@ void execStepFloat(OsecpuVm *vm)
 			ip += 5;
 			goto fin;
 		}
-		if (ip[1] == 1) {
+		if (ip[1] == 2) {
 			f = ip[3]; bit = ip[4];
 			union {
 				float f32;

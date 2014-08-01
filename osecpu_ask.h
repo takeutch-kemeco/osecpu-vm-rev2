@@ -49,6 +49,8 @@
 
 #define api_malloc(_p, typ, len)					R3B=typ; R3A=len; DB(0xb2); r(R3B); bit(32); r(R3A); bit(32); DB((_p&0x3f)+0x80)
 #define api_malloc_initInt(_p, typ, len, v0)		R3B=typ; R3A=len; DB(0xb2); r(R3B); bit(32); r(R3A); bit(32); DB((_p&0x3f)+0x80); P3B=_p; R39=v0; R3B=0; lbstk2(0,1); LB(2, lbstk1(0,0)); SMEM0PP(32, R39, typ, P3B); R3B++; CMPE(32, 32, R3F, R3A, R3B); CND(R3F); PLIMM(P3F, lbstk1(0,0)); lbstk3(0)
+#define junkApi_fileRead(_filesize, _p, arg)		REM01(); R30=0x07c0; R31=arg; PCALL(P2F); _filesize=R30; _p=P31
+#define junkApi_fileWrite(arg, filesize, p)			REM01(); R30=0x07c1; R31=arg; R32=filesize; P31=p; PCALL(P2F)
 
 #define API_REG		0x80520000
 
@@ -140,6 +142,7 @@
 #define MODE_OR		0x04
 #define MODE_XOR	0x08
 #define MODE_AND	0x0c
+#define MODE_MON8	0x100
 
 #define	DAT_SA(label, typ32, length)	aska_code(0); DAT_SA0(label, typ32, length)
 #define DAT_END()						aska_code(1)

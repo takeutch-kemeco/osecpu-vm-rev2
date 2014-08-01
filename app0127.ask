@@ -1,0 +1,43 @@
+#include "osecpu_ask.h"
+
+	Int32s c:R00, x:R01, y:R02, mode:R03;
+	Int32s n:R04, zx:R05, zy:R06;
+    Int32s cx:R07, cy:R08, tx:R09, ty:R0A, xx:R0B, yy:R0C;
+
+	REM1C0();
+	api_openWin(640, 480);
+	for (y = 0; y != 480; y++) {
+		for (x = 0; x != 640; x++) {
+			mode = MODE_COL24;
+			R04 = R01 + R02;
+			CMPNEI(32, 32, R04, R04, 0); // R04は最初以外のとき-1.
+			REM36();
+			CNVIF(64, 32, F00, R01);
+			CNVIF(64, 32, F01, R02); // ここまで1C0マクロ.
+			cx = x - 448;
+			cy = y - 240;
+			REM34();
+            zx = 0;
+            zy = 0;
+			for (n = 0; n != 256; n++) {
+				REM36();
+				xx = zx * zx;
+				yy = zy * zy;
+				tx = xx + yy;
+                if (tx > (2 << 16)) break;
+                tx = xx - yy;
+                ty = zx * zy;
+				ty += ty;
+				REM34();
+				tx >>= 8;
+				ty >>= 8;
+				REM36();
+				zx = tx + cx;
+				zy = ty + cy;
+            }
+		//	col = 0; if (n == 256) { col = -1; }
+			CMPEI(32, 32, R00, R04, 256); /* 上記の代わりになる */
+			REM1C0();
+            api_drawPoint(mode, c, x, y);
+        }
+    }

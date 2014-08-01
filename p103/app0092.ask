@@ -1,0 +1,11 @@
+#include "osecpu_ask.h"
+
+	int32s x:R00, y:R01, c:R02;
+//	junkApi_openWin(256, 256);
+//	c = 0;
+	for (x = 0; x != 256; x++) {
+		for (y = 0; y != 256; y++) {
+			c++; // 0000xxyy
+			junkApi_drawPoint(0, x, y, c);
+		}
+	}

@@ -175,20 +175,20 @@ int main(int argc, const UCHAR **argv)
 			 "      osectols tool:getint exp:expression [flags:#]\n"
 			 "      osectols tool:osastr str:string\n"
 			 "      osectols tool:binstr str:string\n"
-			 "  aska   ver.0.22\n"//123
+			 "  aska   ver.0.23\n"//124
 			 "  prepro ver.0.01\n"
 			 "  lbstk  ver.0.04\n"//117
-			 "  db2bin ver.0.22\n"//123
+			 "  db2bin ver.0.23\n"//124
 			 "  disasm ver.0.02\n"
-			 "  appack ver.0.25\n"//123
+			 "  appack ver.0.26\n"//124
 			 "  maklib ver.0.01\n"
 			 "  getint ver.0.06\n"
 			 "  osastr ver.0.00\n"
 			 "  binstr ver.0.00\n"
 		//	 "  fcode  ver.0.00\n"
 			 "  b32    ver.0.01\n"  //118
-			 "  dumpbk ver.0.03\n"  //123
-			 "  dumpfr ver.0.02"  //123
+			 "  dumpbk ver.0.04\n"  //124
+			 "  dumpfr ver.0.03"  //124
 
 		);
 		r = 1;
@@ -270,8 +270,9 @@ int isSymbolChar(UCHAR c)
 #define ELEMENT_TERMINATE		0
 #define ELEMENT_ERROR			1
 #define ELEMENT_REG				2
-#define ELEMENT_PREG			3
-#define ELEMENT_CONST			4
+#define ELEMENT_CONST			3
+#define ELEMENT_PREG			4
+#define ELEMENT_FREG			6
 #define ELEMENT_DREG			7
 
 	#define	ELEMENT_INT				1
@@ -359,7 +360,7 @@ const UCHAR *stringToElements(struct Element *q, const UCHAR *p, int mode0)
 	for (;;) {
 		if (q - 1 > q0 && q[-2].typ == ELEMENT_MINUS && q[-1].typ == ELEMENT_CONST) {
 			if ((q - 2 == q0) || (q - 2 > q0 &&
-				q[-3].typ != ELEMENT_REG && q[-3].typ != ELEMENT_PREG &&
+				q[-3].typ != ELEMENT_REG && q[-3].typ != ELEMENT_PREG && q[-3].typ != ELEMENT_FREG &&
 				q[-3].typ != ELEMENT_CONST && q[-3].typ != ELEMENT_IDENT &&
 				q[-3].typ != ELEMENT_PRNTH1))
 			{
@@ -570,6 +571,12 @@ get8bit:
 					q++;
 					continue;
 				}
+				if (p[-3] == 'F' && 0 <= i && i <= 3 && j >= 0) {
+					q->typ = ELEMENT_FREG;
+					q->iValue = i << 4 | j;
+					q++;
+					continue;
+				}
 				if (p[-3] == 'D' && p[-2] == 'R' && '0' <= p[-1] && p[-1] <= '9') {
 					q->typ = ELEMENT_DREG;
 					q->iValue = p[-1] - '0';
@@ -620,7 +627,7 @@ const struct Element *shuntingYard(struct Element *q, const struct Element *p)
 	for (;;) {
 		stack[sp].subTyp[1] = 0; // デフォルトでは左結合.
 		if (p->typ == ELEMENT_ERROR) goto err;
-		if (p->typ == ELEMENT_CONST || p->typ == ELEMENT_REG || p->typ == ELEMENT_PREG || p->typ == ELEMENT_DREG) {
+		if (p->typ == ELEMENT_CONST || p->typ == ELEMENT_REG || p->typ == ELEMENT_PREG || p->typ == ELEMENT_FREG || p->typ == ELEMENT_DREG) {
 			if (isLastValue != 0) goto err;
 			*q++ = *p++;
 			isLastValue = 1;
@@ -776,6 +783,7 @@ void dumpElements(const struct Element *e)
 			if (e[i].typ == ELEMENT_CONST)	{ printf("%d ",    e[i].iValue); continue; }
 			if (e[i].typ == ELEMENT_REG)	{ printf("R%02X ", e[i].iValue); continue; }
 			if (e[i].typ == ELEMENT_PREG)	{ printf("P%02X ", e[i].iValue); continue; }
+			if (e[i].typ == ELEMENT_FREG)	{ printf("F%02X ", e[i].iValue); continue; }
 			if (e[i].typ == ELEMENT_MINUS1)	{ printf("-a ");    continue; }
 			if (e[i].typ == ELEMENT_MINUS2)	{ printf("a-b ");   continue; }
 			if (e[i].typ == ELEMENT_MMINS0)	{ printf("--a ");   continue; }
@@ -920,8 +928,12 @@ err:
 					stk[sp++] = f[i].iValue + 0x40;
 					continue;
 				}
-				if (f[i].typ == ELEMENT_DREG) {
+				if (f[i].typ == ELEMENT_FREG) {
 					stk[sp++] = f[i].iValue + 0x80;
+					continue;
+				}
+				if (f[i].typ == ELEMENT_DREG) {
+					stk[sp++] = f[i].iValue + 0xc0;
 					continue;
 				}
 			}
@@ -1143,7 +1155,7 @@ char askaPass1Optimize(struct Element **pstk, struct Element *stk0, struct Eleme
 	for (;;) {
 		if (r != 0) break;
 		UCHAR et = ele->typ, ce = canEval(et);
-		if (et == ELEMENT_CONST || et == ELEMENT_REG || et == ELEMENT_PREG) {
+		if (et == ELEMENT_CONST || et == ELEMENT_REG || et == ELEMENT_PREG || et == ELEMENT_FREG) {
 			*stk = *ele;
 			ele++;
 			stk->subTyp[2] = 0;
@@ -2002,6 +2014,10 @@ identSkip:
 								sprintf(q, "P%02X", ident[i].ele.iValue);
 								q += 3;
 							}
+							if (ident[i].ele.typ == ELEMENT_FREG) {
+								sprintf(q, "F%02X", ident[i].ele.iValue);
+								q += 3;
+							}
 							j = 0;
 							continue;
 						}
@@ -2646,6 +2662,7 @@ int db2binSub0(struct Work *w, const UCHAR **pp, UCHAR **qq)
 			"1typ(",				"DB(0xf7,0x88); DDBE(%0);", // 6bytes.
 			"1r(",					"DB(%0+0x80);", // 1byte.
 			"1p(",					"DB((%0&0x3f)+0x80);", // 1byte.
+			"1f(",					"DB((%0&0x3f)+0x80);", // 1byte.
 			"1dr(",					"DB((%0&0x3f)+0x80);", // 1byte.
 
 			"0NOP(",				"DB(0xf0);",
@@ -2688,6 +2705,23 @@ int db2binSub0(struct Work *w, const UCHAR **pp, UCHAR **qq)
 		//	"3PCMPG(",				"DB(0x2d,%0,%1-0x40,%2-0x40);",
 		//	"2EXT(",				"DB(0x2f,%0); DWBE(%1);",
 
+			"3FLIMM0(",				"DB(0xfc,0x40,0x80); imm(%2); f(%1); bit(%0);",
+			"4FLIMM1(",				"DB(0xfc,0x40,0x81); imm(%2); imm(%3); f(%1); bit(%0);",
+			"4CNVIF(",				"DB(0xfc,0x42); r(%3); bit(%1); f(%2); bit(%0);",
+			"4CNVFI(",				"DB(0xfc,0x43); f(%3); bit(%1); r(%2); bit(%0);",
+
+			"5FCMPE(",				"DB(0xfc,0x48); f(%3); f(%4); bit(%1); r(%2); bit(%0);",
+			"5FCMPNE(",				"DB(0xfc,0x49); f(%3); f(%4); bit(%1); r(%2); bit(%0);",
+			"5FCMPL(",				"DB(0xfc,0x4a); f(%3); f(%4); bit(%1); r(%2); bit(%0);",
+			"5FCMPGE(",				"DB(0xfc,0x4b); f(%3); f(%4); bit(%1); r(%2); bit(%0);",
+			"5FCMPLE(",				"DB(0xfc,0x4c); f(%3); f(%4); bit(%1); r(%2); bit(%0);",
+			"5FCMPG(",				"DB(0xfc,0x4d); f(%3); f(%4); bit(%1); r(%2); bit(%0);",
+
+			"4FADD(",				"DB(0xfc,0x50); f(%2); f(%3); f(%1); bit(%0);",
+			"4FSUB(",				"DB(0xfc,0x51); f(%2); f(%3); f(%1); bit(%0);",
+			"4FMUL(",				"DB(0xfc,0x52); f(%2); f(%3); f(%1); bit(%0);",
+			"4FDIV(",				"DB(0xfc,0x53); f(%2); f(%3); f(%1); bit(%0);",
+
 			"2LIDR(",				"DB(0xfc,0xfd); imm(%1); dr(%0);",
 			"0REM00(",				"DB(0xfc,0xfe,0x00);",
 			"0REM01(",				"DB(0xfc,0xfe,0x10);",
@@ -2703,6 +2737,9 @@ int db2binSub0(struct Work *w, const UCHAR **pp, UCHAR **qq)
 			"1REM37(",				"DB(0xfc,0xfe,0xb7,0xf1); imm(%0);",
 			"5REM38(",				"DB(0xfc,0xfe,0xb8,0x85,%0+0x80,%1+0x80); typ(%2); r(%3); p(%4);",
 			"1REM09(",				"DB(0xfc,0xfe,0x89,0xf1); imm(%0);",
+			"0REM1C0(",				"DB(0xfc,0xfe,0xfd,0xc0,0xf0);",
+			"0REM1C1(",				"DB(0xfc,0xfe,0xfd,0xc1,0xf0);",
+			"0REMFC0(",				"DB(0xfc,0xfe,0xef,0xc0,0xf0);",
 		//	"1DBGINFO(",			"DBGINFO0(%0);",
 			"1JMP(",				"PLIMM(P3F, %0);",
 			"1PJMP(",				"PCP(P3F, %0);",
@@ -2884,14 +2921,20 @@ int db2binSub2Len(const UCHAR *src)
 		i = src[ 9] << 24 | src[10] << 16 | src[11] << 8 | src[12];
 		j = db2binDataWidth(j);
 		if (j <= 0)
-			fputs("db2binSub2Len: error: F0\n", stderr);
+			fputs("db2binSub2Len: error: AE\n", stderr);
 		if (((i * j) & 7) != 0)
-			fprintf(stderr, "db2binSub2Len: error: F0 (align 8bit) bit=%d len=%d\n", j, i);
+			fprintf(stderr, "db2binSub2Len: error: AE (align 8bit) bit=%d len=%d\n", j, i);
 		i = 13 + ((i * j) >> 3);
 	}
 	if (0xb0 <= src[0] && src[0] <= 0xb3) i = 16;
 	if (src[0] == 0xbc && src[1] == 0xf7 && src[2] == 0x88) i = 37; // ENTER
 	if (src[0] == 0xbd && src[1] == 0xf7 && src[2] == 0x88) i = 37; // LEAVE
+	if (src[0] == 0xfc && src[1] == 0x40 && src[2] == 0x80) i = 16; // FLIMM0
+	if (src[0] == 0xfc && src[1] == 0x40 && src[2] == 0x81) i = 22; // FLIMM1
+	if (src[0] == 0xfc && src[1] == 0x42) i = 16; // CNVIF
+	if (src[0] == 0xfc && src[1] == 0x43) i = 16; // CNVFI
+	if (src[0] == 0xfc && 0x48 <= src[1] && src[1] <= 0x4d && src[4] == 0xf7 && src[5] == 0x88 && src[11] == 0xf7 && src[12] == 0x88) i = 17; // FCMPcc
+	if (src[0] == 0xfc && 0x50 <= src[1] && src[1] <= 0x53) i = 11; // FADD...FDIV
 	if (src[0] == 0xfc && src[1] == 0xfd && src[2] == 0xf7 && src[3] == 0x88 && src[8] == 0xf0) i = 9; // LIDR
 	if (src[0] == 0xfc && src[1] == 0xfd && src[2] == 0xf7 && src[3] == 0x88 && src[8] == 0x80) i = 9; // LIDR
 	if (src[0] == 0xfc && src[1] == 0xfe) {
@@ -2922,42 +2965,10 @@ int db2binSub2Len(const UCHAR *src)
 			}
 		}
 		if (src[2] == 0x89 && src[3] == 0xf1 && src[4] == 0xf7 && src[5] == 0x88) i = 10; // remark-9
+		if (src[2] == 0xfd && src[3] == 0xc0 && src[4] == 0xf0) i = 5; // remark-1c0
+		if (src[2] == 0xfd && src[3] == 0xc1 && src[4] == 0xf0) i = 5; // remark-1c1
+		if (src[2] == 0xef && src[3] == 0xc0 && src[4] == 0xf0) i = 5; // remark-fc0
 	}
-#if 0
-	if (*src == 0x00) i = 1;
-	if (0x01 <= *src && *src < 0x04) i = 6;
-	if (*src == 0x04) i = 2;
-	if (0x08 <= *src && *src < 0x0d) i = 8 + src[7] * 4;
-	if (0x0e <= *src && *src < 0x10) i = 8;
-	if (0x10 <= *src && *src < 0x2e) i = 4;
-	if (0x1c <= *src && *src < 0x1f) i = 3;
-	if (*src == 0x1f) i = 11;
-	if (*src == 0x2f) i = 4 + src[1];
-	if (0x3c <= *src && *src <= 0x3d) i = 7;
-	if (*src == 0xf0 || *src == 0x34) {
-		j = src[1] << 24 | src[2] << 16 | src[3] << 8 | src[4];
-		i = src[5] << 24 | src[6] << 16 | src[7] << 8 | src[8];
-		j = db2binDataWidth(j);
-		if (j <= 0)
-			fputs("db2binSub2Len: error: F0\n", stderr);
-		if (((i * j) & 7) != 0)
-			fprintf(stderr, "db2binSub2Len: error: F0 (align 8bit) bit=%d len=%d\n", j, i);
-		i = 9 + ((i * j) >> 3);
-	}
-	if (0xf4 <= *src && *src <= 0xf7 || 0x30 <= *src && *src <= 0x33) i = 4; // 暫定処置.
-	if (0xec <= *src && *src <= 0xef) i = 1;
-	if (*src == 0xfe) i = 2 + src[1];
-	if (*src == 0xff) {
-		if (src[1] == 0x00) { i = strlen(src + 3) + 4; }
-		if (src[1] == 0x01) {
-			i = 3;
-			while ((src[i + 0] | src[i + 1] | src[i + 2] | src[i + 3]) != 0) i += 4;
-			i += 4;
-		}
-		if (src[1] == 0x02) { i = 3; }
-		if (src[1] == 0x03) { i = 7 + (src[i + 3] | src[i + 4] | src[i + 5] | src[i + 6]) * 4; }
-	}
-#endif
 	if (i == 0) {
 		fprintf(stderr, "db2binSub2Len: unknown opecode: %02X-%02X-%02X\n", src[0], src[1], src[2]);
 		exit(1);
@@ -3751,6 +3762,7 @@ typedef struct _AppackWork {
 	int lastLabel;
 	int dr[4];
 	int vecPrfx, vecPrfxMode;
+	const unsigned char *pf3f;
 
 	// for param.
 	Int32 prm_r[0x40], prm_p[0x40], prm_f[0x40];
@@ -3770,7 +3782,7 @@ void appack_initWork(AppackWork *aw)
 	for (i = 0; i < 256; i++)
 		aw->opTbl[i] = i;
 	for (i = 0; i < 3; i++) {
-		for (j = 0; j < 8; j++)
+		for (j = 0; j < 0x40; j++)
 			aw->rep[i][j] = j;
 	}
 	for (j = 0; j < 8; j++)
@@ -4281,6 +4293,110 @@ void appackSub1op(AppackWork *aw, int i)
 	return;
 }
 
+int gcd(int i, int j)
+{
+	int t;
+	for (;;) {
+		if (i < j) {
+			t = i;
+			i = j;
+			j = t;
+		}
+		if (j == 0) break;
+		i = i % j;
+	}
+	return i;
+}
+
+void appackSub1g(AppackWork *aw, const unsigned char *p, char simple)
+// 浮動小数点の定数およびFxx, リピートもあり.
+// fcode_getGに対応している.
+// 0:hh4-integer.
+// 1:有理数.
+// 2:半精度.
+// 3:単精度.
+// 4:倍精度.
+// 5:rep0.
+// 6:rep1.
+// 7:拡張用.
+// 8-15:rep0-8.
+// 16-47:F00-1F.
+// 48-63:F30-3F.
+// 64-127:Fxx
+// 128-:拡張用.
+{
+	int i, j, k;
+	if (*p == 0x80) {
+		i = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
+		appackSub1u(aw, 0);
+		appackSub1i(aw, i, len3table0);
+		goto fin;
+	}
+	if (*p == 0x81) {
+		i = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
+		j = p[9] << 24 | p[10] << 16 | p[11] << 8 | p[12];
+		if (simple == 0) {
+			if (j < 0) {
+				i *= -1;
+				j *= -1;
+			}
+			k = 1;
+			if (i >= 0)
+				k = gcd(i, j);
+			else
+				k = gcd(- i, j);
+			i /= k;
+			j /= k;
+		}
+		appackSub1u(aw, 1);
+		appackSub1i(aw, i, len3table0);
+		appackSub1i(aw, j, len3table0);
+		goto fin;
+	}
+	fprintf(stderr, "appackSub1g: typ=0x%02x\n", *p);
+fin:
+	return;
+}
+
+void appackSub1gf(AppackWork *aw, int i)
+// 浮動小数点の定数およびFxx, リピートもあり.
+// fcode_getGに対応している.
+// 0:hh4-integer.
+// 1:有理数.
+// 2:半精度.
+// 3:単精度.
+// 4:倍精度.
+// 5:rep0.
+// 6:rep1.
+// 7:拡張用.
+// 8-15:rep0-7.
+// 16-47:F00-1F.
+// 48-63:F30-3F.
+// 64-127:Fxx
+// 128-:拡張用.
+{
+	if (i == aw->rep[2][0]) {
+		appackSub1u(aw, 5);
+		goto fin;
+	}
+	if (i == aw->rep[2][1]) {
+		appackSub1u(aw, 6);
+		goto fin;
+	}
+	// rep2-7については手抜きでやってない.
+	if (i <= 0x1f) {
+		appackSub1u(aw, i + 0x10);
+		goto fin;
+	}
+	if (0x30 <= i && i <= 0x3f) {
+		appackSub1u(aw, i + 0x30);
+		goto fin;
+	}
+	appackSub1u(aw, i + 0x40);
+fin:
+	return;
+}
+
 void appack_updateRep(AppackWork *aw, int typ, int r)
 {
 	int tmp0 = r, tmp1, i;
@@ -4546,6 +4662,7 @@ int appack0(struct Work *w, char flags)
 	aw.qHalf = 0;
 	aw.vecPrfx = -1;
 	aw.vecPrfxMode = 0;
+	aw.pf3f = NULL;
 	while (p < p1) {
 //		fprintf(stderr, "appack0: op=%02x-%02x-%02x-%02x (DR0=0x%08x)\n", *p, p[1], p[2], p[3], aw.dr[0]);
 
@@ -4762,6 +4879,14 @@ appack0_bc:
 			p += 8;
 			continue;
 		}
+		if (*p == 0xf4) {
+			appack0_waitFlush(&aw);
+			appackSub1op(&aw, 0x04);
+			appackSub1op(&aw, 0x04);
+			appackSub1r(&aw, p[1] & 0x3f, 0);
+			p += 2;		// repは更新しない.
+			continue;
+		}
 		if (cmpBytes(p, "88_Yx_f788#4_f78800000000_Yx_f78800000020") != 0) {
 			appack0_waitFlush(&aw);
 			i = p[1]  & 0x3f;
@@ -4963,6 +5088,9 @@ appack0_bc:
 				{ 10, R0, R1,  7,  3,  6,  5 }, // DIV
 				{ 10, R0, R1,  7,  3,  6,  5 }, // MOD
 			};
+			static unsigned char typ3table[12] = {
+				0x28, 0x29, 0x2a, 0x2b, 0x38, 0x39, 0x3a, 0x3b, 0x2c, 0x2d, 0x26, 0x27
+			};
 			k = *p & 0x0f;
 			m = p[1];
 			l = p[2];
@@ -5000,30 +5128,32 @@ appack0_bc:
 				appackSub1r(&aw, i, 0);
 				appackSub1i(&aw, j, len3table[k]);
 			} else if (m != 0xbf) {
-				flg4 = 1;
+				flgD = 1;
 				i = p[3] & 0x3f;
 				j = aw.immR3f;
 				if (l != 0xbf)
 					j = 0x80520000 | (l & 0x3f);
-				appackSub1op(&aw, 0x04);
-				appackSub1op(&aw, k | 0x10);
+			//	appackSub1op(&aw, 0x0d);
+			//	appackSub1op(&aw, k | 0x10);
+				appackSub1op(&aw, typ3table[k]);
 				appackSub1r(&aw, m & 0x3f, 0);
 				appackSub1i(&aw, j, len3table[k]);
 				appackSub1r(&aw, i, MODE_REG_LC3);
 			} else {
-				flgD = 1;
+				flg4 = 1;
 				i = p[3] & 0x3f;
 				j = aw.immR3f;
 				if (l == p[3]) {
-					appackSub1op(&aw, 0x0d);
+					appackSub1op(&aw, 0x04);
 					appackSub1op(&aw, k | 0x10);
 					appackSub1r(&aw, i, 0);
 					appackSub1i(&aw, j, len3table[k]);
 				} else {
-					flg4 = 1;
+					flgD = 1;
 					appackSub1op(&aw, 0x04);
-					appackSub1op(&aw, 0x0d);
-					appackSub1op(&aw, k | 0x10);
+				//	appackSub1op(&aw, 0x0d);
+				//	appackSub1op(&aw, k | 0x10);
+					appackSub1op(&aw, typ3table[k]);
 					appackSub1r(&aw, l & 0x3f, 0);
 					appackSub1i(&aw, j, len3table[k]);
 					appackSub1r(&aw, i, MODE_REG_LC3);
@@ -5046,16 +5176,16 @@ appack0_bc:
 						exit(1);
 					}
 					if (aw.vecPrfxMode == 0) {
-						if (flg4 == 0) {
-							if (flgD == 0) {
-								appack_updateRep(&aw, 0, (m & 0x3f) + n);
+						if (flgD == 0) {
+							if (flg4 == 0) {
+								if (m != 0xbf) appack_updateRep(&aw, 0, (m & 0x3f) + n);
 								if (l != 0xbf) appack_updateRep(&aw, 0, l & 0x3f);
 							} else {
 								if (m != 0xbf) appack_updateRep(&aw, 0, m & 0x3f);
-								appack_updateRep(&aw, 0, (l & 0x3f) + n);
+								if (l != 0xbf) appack_updateRep(&aw, 0, (l & 0x3f) + n);
 							}
 						}
-						if (flg4 != 0) {
+						if (flgD != 0) {
 							if (m != 0xbf) appack_updateRep(&aw, 0, m & 0x3f);
 							if (l != 0xbf) appack_updateRep(&aw, 0, l & 0x3f);
 						}
@@ -5139,6 +5269,155 @@ appack0_bc:
 			p += 37 + 3;
 			continue;
 		}
+		if (cmpBytes(p, "fc40_80_f788#4_Yx_f78800000040") != 0) {	// FLIMM0
+			i = p[9] & 0x3f; // f
+			if (i == 0x3f)
+				aw.pf3f = &p[2];
+			else {
+				appack0_waitFlush(&aw);
+				appackSub1op(&aw, 0x40);
+				appackSub1g(&aw, &p[2], simple);
+				appackSub1f(&aw, i, MODE_REG_LC3);
+				appack_updateRep(&aw, 2, i);
+			}
+			p += 16;
+			if (aw.vecPrfx != -1 && i != 0x3f) {
+				for (n = 1; n < aw.vecPrfx; n++) {
+					while (cmpBytes(p, "fcfd_f788#4_80") != 0)
+						p += 9;
+					p += 16;
+					appack_updateRep(&aw, 2, i + n);
+				}
+				appack_updateRep(&aw, 2, i);
+				aw.vecPrfx = -1;
+			}
+			continue;
+		}
+		if (cmpBytes(p, "fc40_81_f788#4_f788#4_Yx_f78800000040") != 0) {	// FLIMM1
+			i = p[15] & 0x3f; // f
+			if (i == 0x3f)
+				aw.pf3f = &p[2];
+			else {
+				appack0_waitFlush(&aw);
+				appackSub1op(&aw, 0x40);
+				appackSub1g(&aw, &p[2], simple);
+				appackSub1f(&aw, i, MODE_REG_LC3);
+				appack_updateRep(&aw, 2, i);
+			}
+			p += 22;
+			if (aw.vecPrfx != -1 && i != 0x3f) {
+				for (n = 1; n < aw.vecPrfx; n++) {
+					while (cmpBytes(p, "fcfd_f788#4_80") != 0)
+						p += 9;
+					p += 22;
+					appack_updateRep(&aw, 2, i + n);
+				}
+				appack_updateRep(&aw, 2, i);
+				aw.vecPrfx = -1;
+			}
+			continue;
+		}
+		if (cmpBytes(p, "fc5x_Yx_Yx_Yx_f78800000040") != 0 && p[1] <= 0x53) {	// FADD, FSUB, FMUL, FDIV
+			appack0_waitFlush(&aw);
+			flg4 = flgD = 0;
+			if (p[2] == p[4]) {
+				appackSub1op(&aw, p[1]);
+				appackSub1f(&aw, p[2], 0);
+				if (p[3] != 0xbf)
+					appackSub1gf(&aw, p[3] & 0x3f);
+				else
+					appackSub1g(&aw, aw.pf3f, simple);
+			} else if (p[3] == p[4]) {
+				flg4 = 1;
+				appackSub1op(&aw, 0x04);
+				appackSub1op(&aw, p[1]);
+				appackSub1f(&aw, p[3], 0);
+				if (p[2] != 0xbf)
+					appackSub1gf(&aw, p[2] & 0x3f);
+				else
+					appackSub1g(&aw, aw.pf3f, simple);
+			} else if (p[2] != 0xbf) {
+				flgD = 1;
+			//	appackSub1op(&aw, 0x0d);
+				appackSub1op(&aw, p[1] + 4);
+				appackSub1f(&aw, p[2], 0);
+				if (p[3] != 0xbf)
+					appackSub1gf(&aw, p[3] & 0x3f);
+				else
+					appackSub1g(&aw, aw.pf3f, simple);
+				appackSub1f(&aw, p[4] & 0x3f, MODE_REG_LC3);
+			} else {
+				flg4 = flgD = 1;
+				appackSub1op(&aw, 0x04);
+			//	appackSub1op(&aw, 0x0d);
+				appackSub1op(&aw, p[1] + 4);
+				appackSub1f(&aw, p[3], 0);
+				appackSub1g(&aw, aw.pf3f, simple);
+				appackSub1f(&aw, p[4] & 0x3f, MODE_REG_LC3);
+			}
+			i = p[2] & 0x3f;
+			j = p[3] & 0x3f;
+			k = p[4] & 0x3f;
+			if (i != 0x3f) appack_updateRep(&aw, 2, i);
+			if (j != 0x3f) appack_updateRep(&aw, 2, j);
+			appack_updateRep(&aw, 2, k);
+			p += 11;
+			if (aw.vecPrfx != -1) {
+				for (n = 1; n < aw.vecPrfx; n++) {
+					while (cmpBytes(p, "fcfd_f788#4_80") != 0)
+						p += 9;
+					if (cmpBytes(p, "fc40_80_f788#4_Yx_f78800000040") != 0)
+						p += 16;
+					if (cmpBytes(p, "fc40_81_f788#4_f788#4_Yx_f78800000040") != 0)
+						p += 22;
+					if (cmpBytes(p, "fc5x_Yx_Yx_Yx_f78800000040") == 0) {
+						fprintf(stderr, "appack0: f-alu: vecPrfx: error:\n");
+						exit(1);
+					}
+					if (p[2] != 0xbf) appack_updateRep(&aw, 2, p[2] & 0x3f);
+					if (p[3] != 0xbf) appack_updateRep(&aw, 2, p[3] & 0x3f);
+					appack_updateRep(&aw, 2, k + n);
+					p += 11;
+				}
+				if (i != 0x3f) appack_updateRep(&aw, 2, i);
+				if (j != 0x3f) appack_updateRep(&aw, 2, j);
+				appack_updateRep(&aw, 2, k);
+				aw.vecPrfx = -1;
+			}
+			continue;
+		}
+		if (cmpBytes(p, "fc4xYxYx_f78800000040_bf_f78800000020 f4_bf f3_f788#4_bf") != 0 && 0x48 <= p[1] && p[1] <= 0x4d) {	// FCMPcc
+			appack0_waitFlush(&aw);
+			i = p[22] << 24 | p[23] << 16 | p[24] << 8 | p[25];
+			i = appackSub2b(&aw, 0, i);
+			if (i == 1) {
+				appackSub1op(&aw, p[1]);
+				appackSub1f(&aw, p[2] & 0x3f, 0);
+				if (p[3] == 0xbf)
+					appackSub1g(&aw, aw.pf3f, simple);
+				else
+					appackSub1gf(&aw, p[3] & 0x3f);
+			} else {
+				appackSub1op(&aw, 0x04);
+				appackSub1op(&aw, p[1]);
+				appackSub1f(&aw, p[2] & 0x3f, 0);
+				if (p[3] == 0xbf)
+					appackSub1g(&aw, aw.pf3f, simple);
+				else
+					appackSub1gf(&aw, p[3] & 0x3f);
+				appackSub1s(&aw, i, 0);
+			}
+			if (aw.waitLb0 < i)
+				aw.waitLb0 = i;
+			appack_updateRep(&aw, 2, p[2] & 0x3f);
+			if (p[3] != 0xbf)
+				appack_updateRep(&aw, 2, p[3] & 0x3f);
+			p += 27;
+			continue;
+		}
+
+
+
 
 		if (cmpBytes(p, "fcfd_f788#4_80") != 0) {
 			i = p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7];
@@ -5421,6 +5700,85 @@ appack0_bc:
 			aw.vecPrfx = i;
 			aw.vecPrfxMode = 1;
 			p += 10;
+			continue;
+		}
+		if (cmpBytes(p, "fcfe_fdcx_f0") != 0 && p[3] <= 0xc1) {
+			// REM1C0() : super-0
+			k = p[3] & 1;
+			p += 5;
+			while (cmpBytes(p, "fcfd_f788#4_80") != 0)
+				p += 9;
+			if (cmpBytes(p, "fcfe_10 f2_f788#4_b0_f788#4") == 0) {
+				fprintf(stderr, "appack0: REM1C0: error: fcfe10\n");
+				exit(1);
+			}
+			i = p[6] << 24 | p[7] << 16 | p[8] << 8 | p[9];
+			p += 17;
+			if (i == 0x0002) {
+				while (cmpBytes(p, "fcfe_00") == 0)
+					p += db2binSub2Len(p);
+				p += 3;
+				aw.lastLabel++;
+				// 何も出力しない.
+				continue;
+			}
+			if (i == 0x0010 && p[28] == 0xf2 && p[42] == 0xf2) {
+				i = p[31] << 24 | p[32] << 16 | p[33] << 8 | p[34];
+				j = p[45] << 24 | p[46] << 16 | p[47] << 8 | p[48];
+				if (i == j) {
+					if (i ==  128) { i = 0; j = -1; }
+					if (i ==  256) { i = 0; j =  0; }
+					if (i ==  512) { i = 0; j =  1; }
+					if (i == 1024) { i = 0; j =  2; }
+					if (i > 0) j = 0;
+				} else {
+					if (i ==  320 && j ==  240) { i = -1; j = -1; }
+					if (i ==  640 && j ==  480) { i = -1; j =  0; }
+					if (i ==  800 && j ==  600) { i = -1; j =  1; }
+					if (i == 1024 && j ==  768) { i = -1; j =  2; }
+					if (i == 1280 && j == 1024) { i = -1; j =  3; }
+					if (i == 1600 && j == 1200) { i = -1; j =  4; }
+				}
+				flg4 = 2;
+				while (cmpBytes(p, "fc42_82_f788#4_81_f788#4") == 0) {
+					if (flg4 == 2) {
+						if (cmpBytes(p, "f2_f78800000000_82_f788#4") != 0) flg4 = 0;
+						if (cmpBytes(p, "f2_f78800000000_81_f788#4") != 0) flg4 = 1;
+					}
+					p += db2binSub2Len(p);
+				}
+				p += 16;
+				flg4 ^= k;
+				appack0_waitFlush(&aw);
+				if (flg4 != 0)
+					appackSub1op(&aw, 0x4);
+				appackSub1op(&aw, 0x1c0 | k);
+				appackSub1i(&aw, i, len3table0);
+				appackSub1i(&aw, j, len3table0);
+				aw.lastLabel += 3;
+				appack_updateRep(&aw, 0, 0x03);
+				appack_updateRep(&aw, 0, 0x04);
+				appack_updateRep(&aw, 0, 0x02);
+				appack_updateRep(&aw, 0, 0x01);
+				appack_updateRep(&aw, 2, 0x01);
+				appack_updateRep(&aw, 2, 0x00);
+				continue;
+			}
+			fprintf(stderr, "appack0: REM1C0: error: i=%d\n", i);
+			exit(1);
+		}
+		if (cmpBytes(p, "fcfe_efc0_f0") != 0) {
+			appack0_waitFlush(&aw);
+			appackSub1op(&aw, 0xfc0);
+			printf("REM-FC0 : debug dump-00\n");
+			for (i = 0; i < 3; i++) {
+				for (j = 0; j < 0x40; j++) {
+					if (j > 0) putchar('-');
+					printf("%02x", aw.rep[i][j]);
+				}
+				putchar('\n');
+			}
+			p += 5;
 			continue;
 		}
 err:
@@ -7151,6 +7509,58 @@ int dumpbk(struct Work *w)
 			p += 37;
 			continue;
 		}
+		if (cmpBytes(p, "fc40_80_f788#4_Yx_f788#4") != 0) {
+			i = p[5] << 24 | p[6] << 16 | p[7] << 8 | p[8];
+			j = p[9];
+			k = p[12] << 24 | p[13] << 16 | p[14] << 8 | p[15];
+			printf("  fc40_80_f788%08x_%02x_f788%08x\n", i, j, k);
+			p += 16;
+			continue;
+		}
+		if (cmpBytes(p, "fc40_81_f788#4_f788#4_Yx_f788#4") != 0) {
+			i = p[5] << 24 | p[6] << 16 | p[7] << 8 | p[8];
+			j = p[11] << 24 | p[12] << 16 | p[13] << 8 | p[14];
+			printf("  fc40_81_f788%08x_f788%08x_", i, j);
+			j = p[15];
+			k = p[18] << 24 | p[19] << 16 | p[20] << 8 | p[21];
+			printf("%02x_f788%08x\n", j, k);
+			p += 22;
+			continue;
+		}
+		if (cmpBytes(p, "fc42_Yx_f788#4_Yx_f788#4") != 0) {
+			i = p[2];
+			j = p[5] << 24 | p[6] << 16 | p[7] << 8 | p[8];
+			printf("  fc42_%02x_f788%08x_", i, j);
+			i = p[9];
+			j = p[12] << 24 | p[13] << 16 | p[14] << 8 | p[15];
+			printf("%02x_f788%08x\n", i, j);
+			p += 16;
+			continue;
+		}
+		if (cmpBytes(p, "fc43_Yx_f788#4_Yx_f788#4") != 0) {
+			i = p[2];
+			j = p[5] << 24 | p[6] << 16 | p[7] << 8 | p[8];
+			printf("  fc43_%02x_f788%08x_", i, j);
+			i = p[9];
+			j = p[12] << 24 | p[13] << 16 | p[14] << 8 | p[15];
+			printf("%02x_f788%08x\n", i, j);
+			p += 16;
+			continue;
+		}
+		if (cmpBytes(p, "fc4x_Yx_Yx_f788#4_Yx_f788#4") != 0 && 0x48 <= p[1] && p[1] <= 0x4d) {
+			i = p[ 6] << 24 | p[ 7] << 16 | p[ 8] << 8 | p[ 9];
+			j = p[13] << 24 | p[14] << 16 | p[15] << 8 | p[16];
+			printf("  fc%02x_%02x_%02x_f788%08x_%02x_f788%08x\n", p[1], p[2], p[3], i, p[10], j);
+			p += 17;
+			continue;
+		}
+
+		if (cmpBytes(p, "fc5x_Yx_Yx_Yx_f788#4") != 0 && p[1] <= 0x53) {
+			i = p[ 7] << 24 | p[ 8] << 16 | p[ 9] << 8 | p[10];
+			printf("  fc%02x_%02x_%02x_%02x_f788%08x\n", p[1], p[2], p[3], p[4], i);
+			p += 11;
+			continue;
+		}
 		if (cmpBytes(p, "fcfdf788#480") != 0) {
 			i = p[ 4] << 24 | p[ 5] << 16 | p[ 6] << 8 | p[ 7];
 			printf("fcfd_f788%08x_80 (%d)\n", i, i);
@@ -7177,6 +7587,21 @@ int dumpbk(struct Work *w)
 			i = p[ 5] << 24 | p[ 6] << 16 | p[ 7] << 8 | p[ 8];
 			printf("  fcfe_2_1_f788%08x\n", i);
 			p += 9;
+			continue;
+		}
+		if (cmpBytes(p, "fcfe_fdc0_f0") != 0) {
+			printf("  fcfe_fdc0_f0\n");
+			p += 5;
+			continue;
+		}
+		if (cmpBytes(p, "fcfe_fdc1_f0") != 0) {
+			printf("  fcfe_fdc1_f0\n");
+			p += 5;
+			continue;
+		}
+		if (cmpBytes(p, "fcfe_efc0_f0") != 0) {
+			printf("  fcfe_efc0_f0\n");
+			p += 5;
 			continue;
 		}
 
@@ -7350,6 +7775,27 @@ void dumpfr_updateRep(int *rep, int r)
 	return;
 }
 
+void dumpfr_skipG(Hh4Reader *hh4r)
+{
+	int i;
+	printf("_");
+	i = dumpfr_getUnsigned(hh4r);
+	if (i == 0) {
+		dumpfr_skipHh4(hh4r, 1);
+		goto fin;
+	}
+	if (i == 1) {
+		dumpfr_skipHh4(hh4r, 2);
+		goto fin;
+	}
+	if (i >= 5) goto fin;
+
+	printf("\ndumpfr: unknown fimm-mode : i=%d\n", i);
+	exit(1);
+fin:
+	return;
+}
+
 int dumpfr(struct Work *w)
 {
 	Hh4Reader hh4r;
@@ -7385,9 +7831,10 @@ int dumpfr(struct Work *w)
 			// 末尾の0.5バイトを埋めていた0を発見.
 			continue;
 		}
-		if (op < 256)
+		if (op < 256) {
 			hist[op]++;
-		op = opTbl[op];
+			op = opTbl[op];
+		}
 		if (op == 0x1) {
 			if (flag4 == 0 && flagD == 0)
 				continue;
@@ -7398,6 +7845,9 @@ int dumpfr(struct Work *w)
 				printf("_");
 				continue;
 			}
+			flag4 = 0;
+			dumpfr_skipHh4(&hh4r, 1);
+			continue;
 		}
 		if (op == 0x2) {
 			dumpfr_skipHh4(&hh4r, 2);
@@ -7519,9 +7969,25 @@ int dumpfr(struct Work *w)
 			dumpfr_skipHh4(&hh4r, 4);
 			continue;
 		}
+		if (0x26 <= op && op <= 0x27) {	// DIV3, MOD3
+			op += 0x1a - 0x26;
+			flagD ^= 1;
+		}
+		if (0x28 <= op && op <= 0x2b) {	// OR3, XOR3, AND3, SBX3
+			op += 0x10 - 0x28;
+			flagD ^= 1;
+		}
+		if (0x2c <= op && op <= 0x2d) {	// SHL3, SAR3
+			op += 0x18 - 0x2c;
+			flagD ^= 1;
+		}
+		if (0x38 <= op && op <= 0x3b) {	// ADD3, SUB3, MUL3, SBR3
+			op += 0x14 - 0x38;
+			flagD ^= 1;
+		}
 		if (0x10 <= op && op <= 0x1b /* && op != 0x17 */) {
 			j = 2;
-			if (flag4 != 0) j++;
+			if (flagD != 0) j++;
 			dumpfr_skipHh4(&hh4r, j);
 			flag4 = flagD = 0;
 			continue;
@@ -7598,6 +8064,35 @@ int dumpfr(struct Work *w)
 			dumpfr_skipHh4(&hh4r, 1);
 			continue;
 		}
+		if (op == 0x40) {
+			dumpfr_skipG(&hh4r);
+			dumpfr_skipHh4(&hh4r, 1);
+			continue;
+		}
+		if (0x48 <= op && op <= 0x4d) {
+			dumpfr_skipHh4(&hh4r, 1);
+			dumpfr_skipG(&hh4r);
+			if (flagD != 0) {
+				dumpfr_skipHh4(&hh4r, 1);
+				flagD = 0;
+				continue;
+			}
+			if (flag4 != 0) {
+				dumpfr_skipHh4(&hh4r, 1);
+				flag4 = 0;
+				continue;
+			}
+			continue;
+		}
+		if (0x50 <= op && op <= 0x57) {
+			if (op >= 0x54) flagD ^= 1;
+			dumpfr_skipHh4(&hh4r, 1);
+			dumpfr_skipG(&hh4r);
+			if (flagD != 0)
+				dumpfr_skipHh4(&hh4r, 1);
+			flag4 = flagD = 0;
+			continue;
+		}
 		if (op == 0xfd) {
 			printf("_");
 			i = dumpfr_getUnsigned(&hh4r);
@@ -7605,6 +8100,11 @@ int dumpfr(struct Work *w)
 			j = dumpfr_getUnsigned(&hh4r);
 			if (j == 0)
 				printf(" (%d)", i);
+			continue;
+		}
+		if (0x1c0 <= op && op <= 0x1c1) {
+			dumpfr_skipHh4(&hh4r, 2);
+			flag4 = flagD = 0;
 			continue;
 		}
 		printf("\ndumpfr: unknown opecode: %02x\n", op);

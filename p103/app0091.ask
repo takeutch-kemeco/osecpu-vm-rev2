@@ -1,0 +1,4 @@
+#include "osecpu_ask.h"
+
+junkApi_putConstString('hello, world');
+

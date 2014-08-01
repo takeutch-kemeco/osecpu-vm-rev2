@@ -32,7 +32,7 @@ int jitcStepFloat(OsecpuJitc *jitc)
 			jitcStep_checkBitsF(pRC, bit);
 			goto fin;
 		}
-		if (ip[1] == 1) {
+		if (ip[1] == 2) {
 			ip[2] = hh4ReaderGet4Nbit(&jitc->hh4r, 32 / 4); // imm
 			ip[3] = hh4ReaderGetUnsigned(&jitc->hh4r); // f
 			ip[4] = hh4ReaderGetUnsigned(&jitc->hh4r); // bit
@@ -41,7 +41,7 @@ int jitcStepFloat(OsecpuJitc *jitc)
 			jitcStep_checkBitsF(pRC, bit);
 			goto fin;
 		}
-		if (ip[1] == 2) {
+		if (ip[1] == 3) {
 			ip[2] = hh4ReaderGet4Nbit(&jitc->hh4r, 32 / 4); // imm-high
 			ip[3] = hh4ReaderGet4Nbit(&jitc->hh4r, 32 / 4); // imm-low
 			ip[4] = hh4ReaderGetUnsigned(&jitc->hh4r); // f
@@ -116,7 +116,7 @@ void execStepFloat(OsecpuVm *vm)
 			ip += 5;
 			goto fin;
 		}
-		if (ip[1] == 1) {
+		if (ip[1] == 2) {
 			f = ip[3]; bit = ip[4];
 			union {
 				float f32;
@@ -127,7 +127,7 @@ void execStepFloat(OsecpuVm *vm)
 			ip += 5;
 			goto fin;
 		}
-		if (ip[1] == 2) {
+		if (ip[1] == 3) {
 			f = ip[4]; bit = ip[5];
 			union {
 				double f64;
