@@ -40,6 +40,7 @@ int OsecpuMain(int argc, const unsigned char **argv)
 	vm.debugBreakPointIndex = -1;
 	vm.debugBreakPointValue = 0;
 	osecpuVmStackInit(&vm, stackSize * (1024 * 1024));
+	osecpuVmPtrCtrlInit(&vm, 4096); 
 	for (i = 1; ; i++) {
 		if (argc <= i) {
 			fputs("usage>osecpu app.ose\n", stderr);
@@ -442,7 +443,7 @@ int apiSprintf(int buflen, unsigned char *buf, unsigned char *p, unsigned char *
 // %s‚â%f‚Ö‚Ì‘Î‰‚Í«—ˆ‚Ì‰Û‘è.
 // b32‚Ì‚Ì‚İcharLen!=1‚ğ‹–‚·(T_SINT32‚É‚È‚é‚½‚ß)...‚¾‚©‚çí‚É”CˆÓ‚ÌŒ^‚ğó‚¯•t‚¯‚Ä‚¢‚é‚í‚¯‚Å‚Í‚È‚¢.
 {
-	int i = 0, base, v, j;
+	int i = 0, base, v, j, dis = 1, len;
 	unsigned char c, sign;
 	while (p < p1) {
 		if (i >= buflen) {
@@ -499,6 +500,34 @@ err:
 			} else
 				i += q[1];
 			q += 4;
+			continue;
+		}
+		if (c == 0x03) {
+			len = 2;
+			goto lz;
+		}
+		if (c == 0x04) {
+			len = 3;
+			goto lz;
+		}
+		if (c == 0x05) {
+			len = *p + 3; // 4-
+			p += charLen;
+			goto lz;
+		}
+		if (c == 0x06) {
+			len = *p + 3; // 4-
+			p += charLen;
+			dis = *p;
+			p += charLen;
+lz:
+			for (j = 0; j < len; j++) {
+				c = ' ';
+				if (i >= dis)
+					c = buf[i - dis];
+				buf[i] = c;
+				i++;
+			}
 			continue;
 		}
 		goto err;

@@ -389,7 +389,7 @@ int apiSprintf(int buflen, unsigned char *buf, unsigned char *p, unsigned char *
 // %sや%fへの対応は将来の課題.
 // b32の時のみcharLen!=1を許す(T_SINT32になるため)...だから常に任意の型を受け付けているわけではない.
 {
-	int i = 0, base, v, j;
+	int i = 0, base, v, j, dis = 1, len;
 	unsigned char c, sign;
 	while (p < p1) {
 		if (i >= buflen) {
@@ -408,10 +408,12 @@ err:
 		}
 		if (c == 0x01) {
 			// q[2] = 1:桁可変, 2:スペース化しない, 4:符号なし, 8:プラスの付与.
+			if (q + 4 > q1) goto err;
 			base = q[0];
 			sign = 0;
 			if (base ==  0) base = 16;
 			if (base == -1) base = 10;
+			if (base < 0 || base > 16) goto err;
 			if (i + q[1] > buflen) goto err;	// q[1]:桁の最大サイズ.
 			v = q[3]; // q[3]: value.
 			if ((q[2] & 4) == 0) {
@@ -444,6 +446,34 @@ err:
 			} else
 				i += q[1];
 			q += 4;
+			continue;
+		}
+		if (c == 0x03) {
+			len = 2;
+			goto lz;
+		}
+		if (c == 0x04) {
+			len = 3;
+			goto lz;
+		}
+		if (c == 0x05) {
+			len = *p + 3; // 4-
+			p += charLen;
+			goto lz;
+		}
+		if (c == 0x06) {
+			len = *p + 3; // 4-
+			p += charLen;
+			dis = *p;
+			p += charLen;
+lz:
+			for (j = 0; j < len; j++) {
+				c = ' ';
+				if (i >= dis)
+					c = buf[i - dis];
+				buf[i] = c;
+				i++;
+			}
 			continue;
 		}
 		goto err;

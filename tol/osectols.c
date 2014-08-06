@@ -61,6 +61,8 @@ int dumpfr(struct Work *w);
 #define	FLAGS_PUT_MANY_INFO		1
 #define FLAGS_NO_DEL_ARGOUT		2
 
+static inline get32be(const unsigned char *p) { return p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3]; }
+
 int main(int argc, const UCHAR **argv)
 {
 	struct Work *w = malloc(sizeof (struct Work));
@@ -178,16 +180,16 @@ int main(int argc, const UCHAR **argv)
 			 "  aska   ver.0.23\n"//124
 			 "  prepro ver.0.01\n"
 			 "  lbstk  ver.0.04\n"//117
-			 "  db2bin ver.0.23\n"//124
+			 "  db2bin ver.0.23\n"//125
 			 "  disasm ver.0.02\n"
-			 "  appack ver.0.26\n"//124
+			 "  appack ver.0.27\n"//125
 			 "  maklib ver.0.01\n"
 			 "  getint ver.0.06\n"
 			 "  osastr ver.0.00\n"
 			 "  binstr ver.0.00\n"
 		//	 "  fcode  ver.0.00\n"
 			 "  b32    ver.0.01\n"  //118
-			 "  dumpbk ver.0.04\n"  //124
+			 "  dumpbk ver.0.05\n"  //125
 			 "  dumpfr ver.0.03"  //124
 
 		);
@@ -2737,9 +2739,10 @@ int db2binSub0(struct Work *w, const UCHAR **pp, UCHAR **qq)
 			"1REM37(",				"DB(0xfc,0xfe,0xb7,0xf1); imm(%0);",
 			"5REM38(",				"DB(0xfc,0xfe,0xb8,0x85,%0+0x80,%1+0x80); typ(%2); r(%3); p(%4);",
 			"1REM09(",				"DB(0xfc,0xfe,0x89,0xf1); imm(%0);",
-			"0REM1C0(",				"DB(0xfc,0xfe,0xfd,0xc0,0xf0);",
-			"0REM1C1(",				"DB(0xfc,0xfe,0xfd,0xc1,0xf0);",
-			"0REMFC0(",				"DB(0xfc,0xfe,0xef,0xc0,0xf0);",
+			"0REM01C0(",			"DB(0xfc,0xfe,0xfd,0xc0,0xf0);",
+			"0REM01C1(",			"DB(0xfc,0xfe,0xfd,0xc1,0xf0);",
+			"0REM01FF(",			"DB(0xfc,0xfe,0xfd,0xff,0xf0);",
+			"0REM0FC0(",			"DB(0xfc,0xfe,0xef,0xc0,0xf0);",
 		//	"1DBGINFO(",			"DBGINFO0(%0);",
 			"1JMP(",				"PLIMM(P3F, %0);",
 			"1PJMP(",				"PCP(P3F, %0);",
@@ -2832,7 +2835,20 @@ UCHAR *db2binSub1(const UCHAR **pp, UCHAR *q, int width)
 					if (*p == 'n') { p++; *q++ = '\n'; continue; }
 					if (*p == 't') { p++; *q++ = '\t'; continue; }
 					if (*p == 'r') { p++; *q++ = '\r'; continue; }
-					if ('0' <= *p && *p <= '7') { p++; *q++ = p[-1] - '0'; continue; } 
+					if ('0' <= *p && *p <= '7') { p++; *q++ = p[-1] - '0'; continue; } // あえて2桁以上は受け入れない. それは\oであるべきだと思うから.
+					if (*p == 'x') {
+						p++;
+						i = 0;
+						for (;;) {
+							j = hexChar(*p);
+							if (j < 0) break;
+							p++;
+							i = i << 4 | j;
+						}
+						*q++ = i;
+						if (*p == '.') p++;
+						continue;
+					}
 				}
 				*q++ = *p++;
 			}
@@ -2965,9 +2981,9 @@ int db2binSub2Len(const UCHAR *src)
 			}
 		}
 		if (src[2] == 0x89 && src[3] == 0xf1 && src[4] == 0xf7 && src[5] == 0x88) i = 10; // remark-9
-		if (src[2] == 0xfd && src[3] == 0xc0 && src[4] == 0xf0) i = 5; // remark-1c0
-		if (src[2] == 0xfd && src[3] == 0xc1 && src[4] == 0xf0) i = 5; // remark-1c1
-		if (src[2] == 0xef && src[3] == 0xc0 && src[4] == 0xf0) i = 5; // remark-fc0
+		if (src[2] == 0xfc && src[4] == 0xf0) i = 5; // remark-0000...00ff
+		if (src[2] == 0xfd && src[4] == 0xf0) i = 5; // remark-0100...01ff
+		if (0xe0 <= src[2] && src[2] <= 0xef && src[4] == 0xf0) i = 5; // remark-0000...0fff
 	}
 	if (i == 0) {
 		fprintf(stderr, "db2binSub2Len: unknown opecode: %02X-%02X-%02X\n", src[0], src[1], src[2]);
@@ -3763,10 +3779,13 @@ typedef struct _AppackWork {
 	int dr[4];
 	int vecPrfx, vecPrfxMode;
 	const unsigned char *pf3f;
+	unsigned char bitbuf_c, bitbuf_b;
 
 	// for param.
 	Int32 prm_r[0x40], prm_p[0x40], prm_f[0x40];
 	double prm_fd[0x40];
+	int prm_rem08, prm_rem09;
+	const unsigned char *prm_rem08buf[16];
 
 	// for simple=0.
 	int v_xsiz, v_ysiz;
@@ -4466,13 +4485,15 @@ void appack_initLabel(struct Work *w, AppackWork *aw)
 
 const UCHAR *appack0_param0(const UCHAR *p, AppackWork *aw)
 {
-	int i;
+	int i, countB0 = 0;
 	for (i = 0; i < 0x40; i++) {
 		aw->prm_r[i] = 0x8052003f;
 		aw->prm_p[i] = 0x8052003f;
  		aw->prm_f[i] = 0x8052003f;
 		aw->prm_fd[i] = 0.0;
 	}
+	aw->prm_rem08 = 0;
+	aw->prm_rem09 = -1;
 	for (;;) {
 		if (cmpBytes(p, "f2_f788#4_bx_f78800000020") != 0) {
 			// LIMM(R30-R3B).
@@ -4483,7 +4504,7 @@ const UCHAR *appack0_param0(const UCHAR *p, AppackWork *aw)
 				continue;
 			}
 		}
-		if (cmpBytes(p, "90YxYxbx_f78800000020") != 0 && p[1] == p[2]) {
+		if (cmpBytes(p, "90_Yx_Yx_bx_f788#4") != 0 && p[1] == p[2]) {
 			// CP(R30-R3B).
 			i = p[3] & 0x3f;
 			if (i <= 0x3b) {
@@ -4492,12 +4513,60 @@ const UCHAR *appack0_param0(const UCHAR *p, AppackWork *aw)
 				continue;
 			}
 		}
+		if (cmpBytes(p, "9e_Yx_bx") != 0) {
+			// PCP(P30-P31).
+			i = p[2] & 0x3f;
+			if (i <= 0x3b) {
+				aw->prm_p[i] = 0x80520000 | (p[1] & 0x3f);
+				p += 3;
+				continue;
+			}
+		}
+		if (cmpBytes(p, "fcfe_89_f1_f788#4") != 0) {
+			// REM09().
+			aw->prm_rem09 = get32be(p + 6);
+			p += 10;
+			continue;
+		}
+		if (cmpBytes(p, "fcfe_88_85_Yx_Yx_f788#4_Yx_Yx") != 0) {
+			// REM08().
+			i = aw->prm_rem08;
+			aw->prm_rem08buf[i] = p;
+			i++;
+			aw->prm_rem08 = i;
+			p += 14;
+			continue;
+		}
+		if (cmpBytes(p, "b0_Yx_f788#4_Yx_f788#4_bx 9e_bx_bx") != 0) {
+			countB0++;
+			p += 16 + 3;
+			continue;
+		}
+		if (cmpBytes(p, "89_Yx_f788#4_bx_f788#4_f78800000000 f2_f78800000001_bf_f788#4 8e_bx_f788#4_bf_f788#4_bx") != 0) {
+			// SMEM0PP
+			p += 51;
+			continue;
+		}
 		break;
 	}
 	if (cmpBytes(p, "f3_f788#4_b0 9e_af_bf f1_f788#4_f78800000003 fcfe00") == 0)	// 8+3+13+3=27
 		p = NULL;
-	else
+	else {
 		p += 27;
+		for (i = 0; i < countB0; ) {
+			if (cmpBytes(p, "f2_f788#4_Yx_f788#4") != 0) {
+				p += 14;
+				continue;
+			}
+			if (cmpBytes(p, "b1_Yx_Yx_f788#4_Yx_f788#4") != 0) {
+				p += 16;
+				i++;
+				continue;
+			}
+			p == NULL;
+			break;
+		}
+	}
 	return p;
 }
 
@@ -4513,6 +4582,175 @@ char appack0_param1(AppackWork *aw, int n, int r0)
 		retCode = 1;
 	return retCode;
 }
+
+void appackSubBitInit(AppackWork *aw)
+{
+	aw->bitbuf_c = 4;
+	aw->bitbuf_b = 0;
+	return;
+}
+
+void appackSubBitFlush(AppackWork *aw)
+{
+	if (aw->bitbuf_c < 4)
+		appackSub0(aw, aw->bitbuf_b);
+	appackSubBitInit(aw);
+	return;
+}
+
+void appackSubBitPut(AppackWork *aw, unsigned char i)
+{
+	if (aw->bitbuf_c == 0) {
+		appackSub0(aw, aw->bitbuf_b);
+		aw->bitbuf_c = 4;
+		aw->bitbuf_b = 0;
+	}
+	aw->bitbuf_c--;
+	aw->bitbuf_b |= i << aw->bitbuf_c;
+	return;
+}
+
+void appack0_param2(AppackWork *aw, int i)
+// REM08(?, ?, T_UINT8, ?, ?); に対応する部分を出力する.
+//	fcfe_88_85_Yx_Yx_f78800000003_bx_bx
+{
+	const unsigned char *p = aw->prm_rem08buf[i];
+	unsigned char modeFr = p[4] & 0x3f, c;
+	int j, k, len = aw->prm_r[p[12] & 0x3f];
+	appackSub1u(aw, modeFr);
+	p += 14;
+	if (modeFr == 4 && len == 0) modeFr = 1; // modeFr=4では、len=0は表現できないため. まあこれは元に戻せなくなっているからエラーにしてしまってもいいレベルだけど.
+	if (modeFr == 0) {	// len, ascii
+		while (cmpBytes(p, "9e_bx_bx") == 0)
+			p += db2binSub2Len(p);
+		p += 3;
+		appackSub1u(aw, len);
+		for (j = 0; j < len; j++) {
+			if (cmpBytes(p, "f2_f788000000#1_bx_f788#4 89_bx_f788#4_bx_f78800000003_f78800000000 f2_f78800000001_bf_f788#4 8e_bx_f78800000003_bf_f788#4_bx") != 0) {
+				c = p[6];
+				appackSub0(aw, (c >> 4) & 0x0f);
+				appackSub0(aw,  c       & 0x0f);
+				p += 14 + 51;
+				continue;
+			}
+			fprintf(stderr, "appack0_param2: mode=5: error: %02x-%02x-%02x-%02x\n", *p, p[1], p[2], p[3]);
+			exit(1);
+		}
+		goto fin;
+	}
+	if (modeFr == 4) {	// hh4, zero-term.
+		while (cmpBytes(p, "9e_bx_bx") == 0)
+			p += db2binSub2Len(p);
+		p += 3;
+		for (j = 0; j < len; j++) {
+			if (cmpBytes(p, "f2_f788000000#1_bx_f788#4 89_bx_f788#4_bx_f78800000003_f78800000000 f2_f78800000001_bf_f788#4 8e_bx_f78800000003_bf_f788#4_bx") != 0) {
+				c = p[6];
+				appackSub1i(aw, c, len3table0);
+				p += 14 + 51;
+				continue;
+			}
+			if (cmpBytes(p, "89_Yx_f788#4_bx_f78800000003_f78800000000 f2_f78800000001_bf_f788#4 8e_bx_f78800000003_bf_f788#4_bx") != 0) {
+				// Rxx
+				if (len == 1 && (p[1] & 0x3f) == aw->rep[0][0]) continue;
+				appackSub1i(aw, (p[1] & 0x3f) | 0x80520000, len3table0);
+				p += 51;
+				continue;
+			}
+			fprintf(stderr, "appack0_param2: mode=4: error: %02x-%02x-%02x-%02x\n", *p, p[1], p[2], p[3]);
+			exit(1);
+		}
+		appackSub1i(aw, 0, len3table0);
+		goto fin;
+	}
+	if (modeFr == 5) {	// [special] 7bit-string, (len-4)
+		while (cmpBytes(p, "9e_bx_bx") == 0)
+			p += db2binSub2Len(p);
+		p += 3;
+		if (len < 4 || len > 999) {	// todo: 上限を確認する.
+			fprintf(stderr, "appack0_param2: mode=5: error: len=%d\n", len);
+			exit(1);
+		}
+		appackSub1u(aw, len - 4);
+		appackSubBitInit(aw);
+		for (j = 0; j < len; j++) {
+			if (cmpBytes(p, "f2_f788000000#1_bx_f788#4 89_bx_f788#4_bx_f78800000003_f78800000000 f2_f78800000001_bf_f788#4 8e_bx_f78800000003_bf_f788#4_bx") != 0) {
+				c = p[6];
+				for (k = 0; k < 7; k++)
+					appackSubBitPut(aw, (c >> (6 - k)) & 1);
+				p += 14 + 51;
+				continue;
+			}
+			fprintf(stderr, "appack0_param2: mode=5: error: %02x-%02x-%02x-%02x\n", *p, p[1], p[2], p[3]);
+			exit(1);
+		}
+		appackSubBitFlush(aw);
+		goto fin;
+	}
+	if (modeFr == 6) {	// [special] 7bit-string, zero-term.
+		while (cmpBytes(p, "9e_bx_bx") == 0)
+			p += db2binSub2Len(p);
+		p += 3;
+		appackSubBitInit(aw);
+		for (j = 0; j < len; j++) {
+			if (cmpBytes(p, "f2_f788000000#1_bx_f788#4 89_bx_f788#4_bx_f78800000003_f78800000000 f2_f78800000001_bf_f788#4 8e_bx_f78800000003_bf_f788#4_bx") != 0) {
+				c = p[6];
+				for (k = 0; k < 7; k++)
+					appackSubBitPut(aw, (c >> (6 - k)) & 1);
+				p += 14 + 51;
+				continue;
+			}
+			fprintf(stderr, "appack0_param2: mode=6: error: %02x-%02x-%02x-%02x\n", *p, p[1], p[2], p[3]);
+			exit(1);
+		}
+		for (k = 0; k < 7; k++)
+			appackSubBitPut(aw, 0);
+		appackSubBitFlush(aw);
+		goto fin;
+	}
+	fprintf(stderr, "appack0_param2: error: mode=%d\n", modeFr);
+	exit(1);
+fin:
+	return;
+}
+
+void appack0_param3(AppackWork *aw, int i)
+// REM08(?, ?, T_SINT32, ?, ?); に対応する部分を出力する.
+//	fcfe_88_85_Yx_Yx_f78800000006_bx_bx
+{
+	const unsigned char *p = aw->prm_rem08buf[i];
+	unsigned char modeFr = p[4] & 0x3f;
+	int j, k, len = aw->prm_r[p[12] & 0x3f];
+	appackSub1u(aw, modeFr);
+	p += 14;
+	if (modeFr == 1) {	// len, hh4
+		while (cmpBytes(p, "9e_bx_bx") == 0)
+			p += db2binSub2Len(p);
+		p += 3;
+		appackSub1u(aw, len);
+		for (j = 0; j < len; j++) {
+			if (cmpBytes(p, "f2_f788#4_bx_f788#4 89_bx_f788#4_bx_f78800000006_f78800000000 f2_f78800000001_bf_f788#4 8e_bx_f78800000006_bf_f788#4_bx") != 0) {
+				k = get32be(p + 3);
+				appackSub1i(aw, k, len3table0);
+				p += 14 + 51;
+				continue;
+			}
+			if (cmpBytes(p, "89_Yx_f788#4_bx_f78800000006_f78800000000 f2_f78800000001_bf_f788#4 8e_bx_f78800000006_bf_f788#4_bx") != 0) {
+				k = p[1] & 0x3f;
+				appackSub1i(aw, k | 0x80520000, len3table0);
+				p += 51;
+				continue;
+			}
+			fprintf(stderr, "appack0_param3: mode=1: error: %02x-%02x-%02x-%02x\n", *p, p[1], p[2], p[3]);
+			exit(1);
+		}
+		goto fin;
+	}
+	fprintf(stderr, "appack0_param3: error: mode=%d\n", modeFr);
+	exit(1);
+fin:
+	return;
+}
+
 
 void appack0_waitFlush(AppackWork *aw)
 {
@@ -4752,7 +4990,7 @@ appack0_bc:
 				appackSub1op(&aw, 0x32);
 				appackSub1i(&aw, i, len3table0);
 				appackSub1i(&aw, j, len3table0);
-				appackSub1r(&aw, k, MODE_REG_LC3);
+				appackSub1p(&aw, k, MODE_REG_LC3);
 				if (l != 0)
 					appackSub1i(&aw, l, len3table0);
 				aw.pxxTyp[k] = i;
@@ -4761,6 +4999,15 @@ appack0_bc:
 				aw.lastLabel++;
 				continue;
 			}
+			appackSub1op(&aw, 0x0d);
+			appackSub1op(&aw, 0x32);
+			appackSub1i(&aw, i, len3table0);
+			appackSub1i(&aw, j, len3table0);
+			appackSub1p(&aw, k, MODE_REG_LC3);
+			aw.pxxTyp[k] = i;
+			appack_updateRep(&aw, 1, k);
+			p += 44;
+			continue;
 		}
 		if (cmpBytes(p, "f2_f788#4_bf_f78800000020 96_Yx_bf_be_f78800000020 94_be_Yx_Yx_f78800000020") != 0) {	// AFFINE
 			i = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];	// a
@@ -5415,10 +5662,6 @@ appack0_bc:
 			p += 27;
 			continue;
 		}
-
-
-
-
 		if (cmpBytes(p, "fcfd_f788#4_80") != 0) {
 			i = p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7];
 			aw.dr[0] = i;
@@ -5445,6 +5688,32 @@ appack0_bc:
 			appack0_waitFlush(&aw);
 			pp = appack0_param0(p + 3, &aw);
 			if (pp != NULL) {
+				const unsigned char *pt;
+				if (aw.prm_r[0x30] == 0x0001 && aw.prm_rem08 > 0 && cmpBytes(aw.prm_rem08buf[0], "fcfe_88_85_Yx_Yx_f78800000003_b1_b1") != 0) { // api_putString
+					if (aw.prm_rem09 == 0) {
+						appackSub1op(&aw, 0x05);
+						appackSub1s(&aw, 0x0001, 0);
+						appack0_param2(&aw, 0);
+						p = pp;
+						aw.lastLabel++;
+						continue;
+					}
+					if (aw.prm_rem09 == 1) {
+						appackSub1op(&aw, 0x04);
+						appackSub1op(&aw, 0x05);
+						appackSub1s(&aw, 0x0001, 0);
+						appackSub1u(&aw, 0);	// rem09=1
+						appack0_param2(&aw, 0);
+						appack0_param3(&aw, 1);
+						p = pp;
+						aw.lastLabel++;
+						continue;
+					}
+					p = pp;
+					aw.lastLabel++;
+					fprintf(stderr, "appack0: fcfe10: warning: skip R30=0x0001\n");
+					continue;
+				}
 				if (aw.prm_r[0x30] == 0x0002) { // api_drawPoint
 					if (appack0_param1(&aw, 3, 0x32) != 0) {
 						appackSub1op(&aw, 0x04);
@@ -5538,6 +5807,35 @@ appack0_bc:
 					aw.lastLabel++;
 					continue;
 				}
+				if (aw.prm_r[0x30] == 0x0006 && aw.prm_rem08 > 0 && cmpBytes(aw.prm_rem08buf[0], "fcfe_88_85_Yx_Yx_f78800000003_b7_b1") != 0) { // api_drawString
+					if (aw.prm_rem09 == 0) {
+						appackSub1op(&aw, 0x05);
+						appackSub1s(&aw, 0x0006, 0);
+						for (i = 0x31; i <= 0x36; i++)
+							appackSub1i(&aw, aw.prm_r[i], len3table0);
+						appack0_param2(&aw, 0);
+						p = pp;
+						aw.lastLabel++;
+						continue;
+					}
+					if (aw.prm_rem09 == 1) {
+						appackSub1op(&aw, 0x04);
+						appackSub1op(&aw, 0x05);
+						appackSub1s(&aw, 0x0006, 0);
+						appackSub1u(&aw, 0);	// rem09=1
+						for (i = 0x31; i <= 0x36; i++)
+							appackSub1i(&aw, aw.prm_r[i], len3table0);
+						appack0_param2(&aw, 0);
+						appack0_param3(&aw, 1);
+						p = pp;
+						aw.lastLabel++;
+						continue;
+					}
+					p = pp;
+					aw.lastLabel++;
+					fprintf(stderr, "appack0: fcfe10: warning: skip R30=0x0006\n");
+					continue;
+				}
 				if (aw.prm_r[0x30] == 0x0009) { // api_sleep
 					appackSub1op(&aw, 0x05);
 					appackSub1s(&aw, 0x0009, 0);
@@ -5605,6 +5903,45 @@ appack0_bc:
 					aw.lastLabel++;
 					continue;
 				}
+				if (aw.prm_r[0x30] == 0x07c0) {	// junkApi_fileRead
+					j = 0;
+					if (cmpBytes(pp, "fcfd_f788#4_80") != 0) {
+						j = pp[4] << 24 | pp[5] << 16 | pp[6] << 8 | pp[7];
+						aw.dr[0] = j;
+						pp += 9;
+					}
+					if (cmpBytes(pp, "90_b0_b0_Yx_f788#4 9e_b1_Yx") != 0) {	// CP(Rxx, R30); PCP(Pxx, P31);
+						i = pp[3] & 0x3f;
+						k = pp[12] & 0x3f;
+						appackSub1op(&aw, 0x05);
+						appackSub1s(&aw, 0x07c0, 0);
+						appackSub1i(&aw, aw.prm_r[0x31], len3table0);
+						appackSub1r(&aw, i, MODE_REG_LC3);
+						appackSub1p(&aw, k, MODE_REG_LC3);
+						appack_updateRep(&aw, 0, i);
+						appack_updateRep(&aw, 1, k);
+						p = pp + 13;
+						aw.lastLabel++;
+						if (j != 0 && encLidr != 0) {
+							appackSub1op(&aw, 0xfd);
+							appackSub1s(&aw, j, 0);
+							appackSub1u(&aw, 0);
+						}
+						continue;
+					}
+				}
+				if (aw.prm_r[0x30] == 0x07c1) { // junkApi_fileWrite
+					appackSub1op(&aw, 0x05);
+					appackSub1s(&aw, 0x07c1, 0);
+					appackSub1i(&aw, aw.prm_r[0x31], len3table0);
+					appackSub1i(&aw, aw.prm_r[0x32], len3table0);
+					appackSub1p(&aw, aw.prm_p[0x31] & 0x3f, 0);	// これは検討の余地がありそう. pにもSub1i的なものが必要かもしれない.
+					p = pp;
+					aw.lastLabel++;
+					continue;
+				}
+
+
 				fprintf(stderr, "appack0: fcfe10: error: R30=0x%04x\n", aw.prm_r[0x30]);
 				exit(1);
 			}
@@ -5650,6 +5987,12 @@ appack0_bc:
 				p += db2binSub2Len(p);
 			p += db2binSub2Len(p);
 			aw.wait7++;
+			continue;
+		}
+		if (cmpBytes(p, "fcfe50") != 0) {
+			appack0_waitFlush(&aw);
+			appackSub0(&aw, 0xf);
+			p += 3;
 			continue;
 		}
 		if (cmpBytes(p, "fcfeb4f0") != 0) {
@@ -5703,13 +6046,13 @@ appack0_bc:
 			continue;
 		}
 		if (cmpBytes(p, "fcfe_fdcx_f0") != 0 && p[3] <= 0xc1) {
-			// REM1C0() : super-0
+			// REM01C0() : super-0
 			k = p[3] & 1;
 			p += 5;
 			while (cmpBytes(p, "fcfd_f788#4_80") != 0)
 				p += 9;
 			if (cmpBytes(p, "fcfe_10 f2_f788#4_b0_f788#4") == 0) {
-				fprintf(stderr, "appack0: REM1C0: error: fcfe10\n");
+				fprintf(stderr, "appack0: REM01C0: error: fcfe10\n");
 				exit(1);
 			}
 			i = p[6] << 24 | p[7] << 16 | p[8] << 8 | p[9];
@@ -5764,13 +6107,20 @@ appack0_bc:
 				appack_updateRep(&aw, 2, 0x00);
 				continue;
 			}
-			fprintf(stderr, "appack0: REM1C0: error: i=%d\n", i);
+			fprintf(stderr, "appack0: REM01C0: error: i=%d\n", i);
 			exit(1);
 		}
+		if (cmpBytes(p, "fcfe_fdff_f0") != 0) {
+			// REM01FF()
+			appackSub1op(&aw, 0x1ff);
+			p += 5;
+			continue;
+		}
+
 		if (cmpBytes(p, "fcfe_efc0_f0") != 0) {
 			appack0_waitFlush(&aw);
 			appackSub1op(&aw, 0xfc0);
-			printf("REM-FC0 : debug dump-00\n");
+			printf("REM-0FC0 : debug dump-00\n");
 			for (i = 0; i < 3; i++) {
 				for (j = 0; j < 0x40; j++) {
 					if (j > 0) putchar('-');
@@ -7401,6 +7751,51 @@ err_bit32:
 	return putBuf(w->argOut, w->obuf, (UCHAR *) qi1);
 }
 
+#if 0
+
+char cmpBytesLen(const UCHAR *s)
+{
+	int i = 0;
+	while (*s != 0) {
+		
+
+}
+
+#endif
+
+char dumpbkSub0(const UCHAR **pp, const UCHAR *s)
+{
+	const UCHAR *p = *pp;
+	char r = cmpBytes(p, s), c;
+	int i, j;
+	if (r != 0) {
+		printf("  ");
+		while (*s != '\0') {
+			c = *s;
+			if (c == '_') {
+				putchar('_');
+				s++;
+				continue;
+			}
+			if (c == '#') {
+				i = s[1] - '0';
+				s += 2;
+				for (j = 0; j < i; j++)
+					printf("%02x", p[j]);
+				p += i;
+				continue;
+			}
+			printf("%02x", *p);
+			p++;
+			s += 2;
+		}
+		putchar('\n');
+		*pp = p;
+	} 
+	return r;
+}
+
+
 int dumpbk(struct Work *w)
 {
 	const UCHAR *p = &(w->ibuf[3]), *p1 = &(w->ibuf[w->isiz]);
@@ -7412,20 +7807,9 @@ int dumpbk(struct Work *w)
 	printf("0000: 05e2 0_0\n");
 	while (p < p1) {
 		printf("%04x: ", p - w->ibuf);
-		if (cmpBytes(p, "f1_f788#4_f788#4") != 0) {
-			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
-			j = p[ 9] << 24 | p[10] << 16 | p[11] << 8 | p[12];
-			printf("  f1_f788%08x_f788%08x\n", i, j);
-			p += 13;
-			continue;
-		}
-		if (cmpBytes(p, "f2_f788#4_Yx_f788#4") != 0) {
-			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
-			j = p[10] << 24 | p[11] << 16 | p[12] << 8 | p[13];
-			printf("  f2_f788%08x_%02x_f788%08x\n", i, p[7], j);
-			p += 14;
-			continue;
-		}
+		if (dumpbkSub0(&p, "f1_f788#4_f788#4") != 0) continue;
+		if (dumpbkSub0(&p, "f2_f788#4_Yx_f788#4") != 0) continue;
+
 		if (cmpBytes(p, "f3_f788#4_Yx") != 0) {
 			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
 			printf("  f3_f788%08x_%02x\n", i, p[7]);
@@ -7490,13 +7874,10 @@ int dumpbk(struct Work *w)
 			printf("\n");
 			continue;
 		}
-		if (cmpBytes(p, "b2_Yx_f788#4_Yx_f788#4_Yx") != 0) {
-			i = p[ 4] << 24 | p[ 5] << 16 | p[ 6] << 8 | p[ 7];
-			j = p[11] << 24 | p[12] << 16 | p[13] << 8 | p[14];
-			printf("  b2_%02x_f788%08x_%02x_f788%08x_%02x\n", p[1], i, p[8], j, p[15]);
-			p += 16;
-			continue;
-		}
+		if (dumpbkSub0(&p, "b0_Yx_f788#4_Yx_f788#4_Yx") != 0) continue;
+		if (dumpbkSub0(&p, "b1_Yx_Yx_f788#4_Yx_f788#4") != 0) continue;
+		if (dumpbkSub0(&p, "b2_Yx_f788#4_Yx_f788#4_Yx") != 0) continue;
+		if (dumpbkSub0(&p, "b3_Yx_Yx_f788#4_Yx_f788#4") != 0) continue;
 		if (cmpBytes(p, "bx_f788#4_f788#4_f788#4_f788#4_f788#4_f788#4") != 0 && 0xbc <= *p && *p <= 0xbd) {
 			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
 			j = p[ 9] << 24 | p[10] << 16 | p[11] << 8 | p[12];
@@ -7561,7 +7942,7 @@ int dumpbk(struct Work *w)
 			p += 11;
 			continue;
 		}
-		if (cmpBytes(p, "fcfdf788#480") != 0) {
+		if (cmpBytes(p, "fcfd_f788#4_80") != 0) {
 			i = p[ 4] << 24 | p[ 5] << 16 | p[ 6] << 8 | p[ 7];
 			printf("fcfd_f788%08x_80 (%d)\n", i, i);
 			p += 9;
@@ -7572,21 +7953,29 @@ int dumpbk(struct Work *w)
 			p += 3;
 			continue;
 		}
+		if (dumpbkSub0(&p, "fcfe_88_85_Yx_Yx_f788#4_Yx_Yx") != 0) continue;
+
 		if (cmpBytes(p, "fcfe_bxf0") != 0) {
 			printf("  fcfe_%x_f0\n", p[2]);
 			p += 4;
-			continue;
-		}
-		if (cmpBytes(p, "fcfe_bxf1_f788#4") != 0) {
-			i = p[ 6] << 24 | p[ 7] << 16 | p[ 8] << 8 | p[ 9];
-			printf("  fcfe_%x_f1_f788%08x\n", p[2], i);
-			p += 10;
 			continue;
 		}
 		if (cmpBytes(p, "fcfe_21_f788") != 0) {
 			i = p[ 5] << 24 | p[ 6] << 16 | p[ 7] << 8 | p[ 8];
 			printf("  fcfe_2_1_f788%08x\n", i);
 			p += 9;
+			continue;
+		}
+		if (cmpBytes(p, "fcfe_89_f1_f788#4") != 0) {
+			i = p[ 6] << 24 | p[ 7] << 16 | p[ 8] << 8 | p[ 9];
+			printf("  fcfe_89_f1_f788%08x\n", i);
+			p += 10;
+			continue;
+		}
+		if (cmpBytes(p, "fcfe_bxf1_f788#4") != 0) {
+			i = p[ 6] << 24 | p[ 7] << 16 | p[ 8] << 8 | p[ 9];
+			printf("  fcfe_%x_f1_f788%08x\n", p[2], i);
+			p += 10;
 			continue;
 		}
 		if (cmpBytes(p, "fcfe_fdc0_f0") != 0) {

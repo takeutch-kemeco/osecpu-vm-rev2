@@ -14,6 +14,10 @@ LOCALLABELS(8);
 	SInt32 ix:R0F, iy:R10, movewait:R11, idir:R12, invline:R13, waitUint:R14;
 	VPtr invstr:P01;
 
+#define AFN(_a, _b, _c, _d)			_a = _c * _b; _a += _d
+//#define AFN(_a, _b, _c, _d)		AFFINE(32, _a, _b, _c, _d)
+// _b‚Í’è”.
+
 	api_malloc_initInt(invstr, T_UINT4, 32 * 6, 0);
 #if 0
 
@@ -45,7 +49,7 @@ LB0(L_next_group);
 	invline = 5;
 	for (i = 0; i != 6; i++) {
 		for (j = 0; j != 26; j++) {
-			/* AFFINE(32, k, 32, i, j); */		k = i * 32; k += j;
+			AFN(k, 32, i, j);	// k = i * 32; k += j;
 			R03 = j % 5;
 			PASMEM0(32, R03, T_UINT4, invstr, k);
 		}
@@ -60,12 +64,12 @@ LB0(L_next_group);
 		// ‰æ–Ê‚ðì‚é.
 //		api_fillRect(MODE_COL3, 0, -1, -1, 0, 0);
 		api_openWin(324, 228);
-//		api_drawStringDec_2(MODE_COL3, -1, 1, 1,  4 * 8 + 2, 0 * 16 + 2, 'SCORE:\1    HIGH:\1', score, 8, 2, high,  8, 2);
+		api_drawStringDec_2(MODE_COL3, -1, 1, 1,  4 * 8 + 2, 0 * 16 + 2, 'SCORE:\1 \4HIGH:\1', score, 8, 2, high,  8, 2);
 		R04 = fx; R05 = 13; PLIMM(P02, L_fighter); R03 = 3; /* PAD(); */ R06 = 6; CALL(L_putchar);
 
 		for (i = 0; i != 6; i++) {
 			for (j = 0; j != 26; j++) {
-				/* AFFINE(32, k, 32, i, j); */		k = i * 32; k += j;
+				AFN(k, 32, i, j);	// k = i * 32; k += j;
 				PALMEM0(32, R03, T_UINT4, invstr, k);
 				if (R03 == 1) {
 					R04 = j + ix; R05 = i + iy;
@@ -77,8 +81,8 @@ LB0(L_next_group);
 			}
 		}
 		if (ly != 0) {
-			/* AFFINEI(32, i,  8, lx, 2 + 3); */ 	i = lx * 8; i += 2 + 3;
-			/* AFFINEI(32, j, 16, ly, 2 + 1); */	j = ly * 16; j += 2 + 1;
+			AFN(i,  8, lx, 2 + 3);	// i = lx * 8; i += 2 + 3;
+			AFN(j, 16, ly, 2 + 1);	// j = ly * 16; j += 2 + 1;
 			api_fillRect(MODE_COL3, 3, 2, 14, i, j);
 		}
 
@@ -86,7 +90,7 @@ LB0(L_next_group);
 		do {
 			i = 0;
 			for (j = 0; j != 26; j++) {
-				/* AFFINE(32, k, 32, invline, j); */	k = invline * 32; k += j;
+				AFN(k, 32, invline, j);	// k = invline * 32; k += j;
 				PALMEM0(32, R03, T_UINT4, invstr, k);
 				i |= R03;
 			}
@@ -140,13 +144,14 @@ LB0(L_next_group);
 		}
 
 		// ‚ ‚½‚è”»’è.
+		REM36();
 		j = lx - ix;
 		k = ly - iy;
 		if (k >= 0) {
 			if (k <= 5) {
 				if (j >= 0) {
 					if (j <= 24) {
-						/* AFFINE(32, k, 32, k, j); */	k *= 32; k += j;
+						AFN(k, 32, k, j);	// k *= 32; k += j;
 						PALMEM0(32, R03, T_UINT4, invstr, k);
 						if (R03 != 0) { // hit!
 							k -= R03;
@@ -179,7 +184,7 @@ LB0(L_next_group);
 				}
 				j = iy + invline;
 				if (j == 12) {
-//					api_drawString(MODE_COL3, 1, 1, 1,  15 * 8 + 2, 6 * 16 + 2, 'GAME OVER');
+					api_drawString(MODE_COL3, 1, 1, 1,  15 * 8 + 2, 6 * 16 + 2, 'GAME OVER');
 					do {
 						api_sleep(0, waitUint);
 						api_inkey(i, 0);
@@ -197,7 +202,7 @@ LB0(L_next_group);
 
 beginFunc(L_putchar);
 	do {
-		SInt32 x:R00, y:R01, c:R02, xsiz:R03, x0:R04, y0:R05, col:R06, x1:R07, y1:R08;
+		SInt32 x:R01, y:R02, c:R00, xsiz:R03, x0:R04, y0:R05, col:R06, x1:R07, y1:R08;
 		xsiz <<= 3;
 		
 		for (y1 = 2; y1 != 18; y1++) {

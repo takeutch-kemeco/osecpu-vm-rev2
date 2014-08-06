@@ -1,0 +1,5 @@
+#include "osecpu_ask.h"
+
+	api_malloc(P01, T_SINT32, 100);
+	debugBreakPoint();
+

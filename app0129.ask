@@ -3,45 +3,51 @@
 	Int32s i:R00, fsiz:R01, j:R02, c:R03, tmp:R04;
 	VPtr p:P01;
 
-	api_putString(' offset  ');
+	junkApi_fileRead(fsiz, p, 1);
+
+	api_putString5(' offset  ');
+#if 0
+	// “Ç‚İ‚â‚·‚¢‘‚«•û.
 	for (i = 0; i != 16; i++) {
-		api_putStringHex(' +\1', i, 1, 0);
+		api_putStringHex0(' +\1', i, 1, 0);
 	}
-	api_putString('  ');
+#else
+	// ŠY“–‚·‚éƒ}ƒNƒ‚ª‚Ü‚¾‚È‚­‚Ä“Ç‚İ‚É‚­‚¢‘‚«•û.
+	for (i = 0x10; i != 0x20; i++) {
+		REM01(); R30=0x0001; REM09(0); REM38(4,1,T_UINT8,R31,P31); DDBE(0x20,0x2b,API_REG+(R00&0x3f),0); R32=0; R33=0; R34=0; PCALL(P2F);
+	}
+#endif
+	api_putString4('\3'); // spc(2)
 	for (i = 0x10; i != 0x20; i++) {
 		api_putcharRxx(i);
 	}
-	api_putString('\n');
-	for (i = 0; i != 75; i++) {
-		api_putString('-');
-	}
-
-	junkApi_fileRead(fsiz, p, 1);
-
-//	j = 0;
+	api_putString5('\n-\5\x47'); // '\n---...---'‚Æ“¯‚¶ˆÓ–¡(-‚Í‘S•”‚Å75ŒÂ).
 	do {
-		api_putStringHex('\n\1 ', j, 8, 2);
+		api_putStringHex4('\n\1 ', j, 8, 2);
 		for (i = 0; i != 16; i++) {
 			tmp = i + j;
 			if (tmp < fsiz) {
 				PALMEM0(32, c, T_UINT8, p, i);
-				api_putStringHex(' \1', c, 2, 2);
+				api_putStringHex4(' \1', c, 2, 2);
 			} else {
-				api_putString('   ');
+				api_putString4('\4'); // spc(3)
 			}
 		}
-		api_putString(' ');
+		api_putString4('\3'); // spc(2)
 		for (i = 0; i != 16; i++) {
 			c = 0x20;
-			tmp = i + j;
-			if (tmp < fsiz) {
-				LMEM0PP(32, c, T_UINT8, p);
-				if (c <  0x20) { c = 0x2e; }
-				if (c >= 0x7f) { c = 0x2e; }
+			if (j < fsiz) {
+				c = 0x2e;
+				LMEM0PP(32, tmp, T_UINT8, p);
+				if (0x20 <= tmp) {
+					if (tmp < 0x7f) {
+						c = tmp;
+					}
+				}
 			}
 			api_putcharRxx(c);
+			j++;
 		}
-		j += 16;
 		if (j < fsiz) continue0;
 	}
 

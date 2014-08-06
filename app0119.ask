@@ -1,7 +1,7 @@
 #include "osecpu_ask.h"
 
 	Int32s c:R00, x:R01, y:R02, mode:R03;
-	REM1C0();
+	REM01C0();
 	api_openWin(256, 256);
 	for (y = 0; y != 256; y++) {
 		for (x = 0; x != 256; x++) {
@@ -10,10 +10,10 @@
 			CMPNEI(32, 32, R04, R04, 0); // R04は最初以外のとき-1.
 			REM36();
 			CNVIF(64, 32, F00, R01);
-			CNVIF(64, 32, F01, R02); // ここまで1C0マクロ.
+			CNVIF(64, 32, F01, R02); // ここまで01C0マクロ.
 			c = x ^ y;
 			mode = MODE_MON8;
-			REM1C0();
+			REM01C0();
 			api_drawPoint(mode, c, x, y);
 		}
 	}

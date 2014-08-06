@@ -155,6 +155,8 @@ void fcode_putAlu(DecodeFcodeStr *s, int opecode, int bit, int r0, int r1, int r
 void fcode_putCp(DecodeFcodeStr *s, int bit, int r0, int r1);
 void fcode_putPcp(DecodeFcodeStr *s, int p0, int p1);
 void fcode_putCmp(DecodeFcodeStr *s, int opecode, int bit0, int bit1, int r0, int r1, int r2);
+void fcode_putTalloc(DecodeFcodeStr *s, int p, int r0, int bit0, int r1, int bit1);
+void fcode_putTfree(DecodeFcodeStr *s, int p, int r0, int bit0, int r1, int bit1);
 void fcode_putFlimm(DecodeFcodeStr *s, int bit, int f);
 void fcode_putCnvif(DecodeFcodeStr *s, int bit0, int bit1, int f, int r);
 void fcode_putCnvfi(DecodeFcodeStr *s, int bit0, int bit1, int r, int f);
@@ -163,12 +165,15 @@ void fcode_putFalu(DecodeFcodeStr *s, int ope, int bit, int f0, int f1, int f2);
 void fcode_putRemark0(DecodeFcodeStr *s);
 void fcode_putRemark1(DecodeFcodeStr *s);
 void fcode_putRemark2(DecodeFcodeStr *s, int i);
+void fcode_putRemark8(DecodeFcodeStr *s, int fmode, int tmode, int typ, int r, int p);
+void fcode_putRemark9(DecodeFcodeStr *s, int i);
 void fcode_putRemark34(DecodeFcodeStr *s);
 void fcode_putRemark35(DecodeFcodeStr *s, int i);
 void fcode_putRemark36(DecodeFcodeStr *s);
 void fcode_putRemark37(DecodeFcodeStr *s, int i);
-void fcode_putRemark1c0(DecodeFcodeStr *s, int i);
-void fcode_putRemarkFc0(DecodeFcodeStr *s);
+void fcode_putRemark01c0(DecodeFcodeStr *s, int i);
+void fcode_putRemark01ff(DecodeFcodeStr *s);
+void fcode_putRemark0fc0(DecodeFcodeStr *s);
 int fcode_putLimmOrCp(DecodeFcodeStr *s, int bit, int r);
 void fcode_putPcallP2f(DecodeFcodeStr *s);
 void fcode_ope2(DecodeFcodeStr *s);
@@ -182,13 +187,16 @@ void fcode_opeCmp(DecodeFcodeStr *s, int opecode);
 void fcode_ope2e(DecodeFcodeStr *s);
 void fcode_ope3d(DecodeFcodeStr *s);
 void fcode_opeFcmp(DecodeFcodeStr *s, int opecode);
+void fcode_api0001(DecodeFcodeStr *s);
 void fcode_api0002(DecodeFcodeStr *s);
 void fcode_api0003(DecodeFcodeStr *s);
 void fcode_api0004(DecodeFcodeStr *s);
 void fcode_api0005(DecodeFcodeStr *s);
+void fcode_api0006(DecodeFcodeStr *s);
 void fcode_api0009(DecodeFcodeStr *s);
 void fcode_api000d(DecodeFcodeStr *s);
 void fcode_api0010(DecodeFcodeStr *s);
+void fcode_api07c0(DecodeFcodeStr *s);
 int fcode_initLabel(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1);
 int fcode_fixLabel(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1);
 int fcode_fixTyp(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1);
@@ -325,13 +333,16 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 		}
 		if (opecode == 0x5) {
 			i = fcode_getSigned(s);
+			if (i == 0x0001) { fcode_api0001(s); goto fin; }
 			if (i == 0x0002) { fcode_api0002(s); goto fin; }
 			if (i == 0x0003) { fcode_api0003(s); goto fin; }
 			if (i == 0x0004) { fcode_api0004(s); goto fin; }
 			if (i == 0x0005) { fcode_api0005(s); goto fin; }
+			if (i == 0x0006) { fcode_api0006(s); goto fin; }
 			if (i == 0x0009) { fcode_api0009(s); goto fin; }
 			if (i == 0x000d) { fcode_api000d(s); goto fin; }
 			if (i == 0x0010) { fcode_api0010(s); goto fin; }
+			if (i == 0x07c0) { fcode_api07c0(s); goto fin; }
 		}
 		if (opecode == 0x6) {
 			if (s->floopDepth >= 16) goto err;
@@ -425,6 +436,10 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 				fcode_unknownBitR(s, 0x39, 0x3b);
 				goto fin;
 			}
+			s->pxxTyp[k] = i;
+			fcode_updateRep(s, 1, k);
+			fcode_unknownBitR(s, 0x3a, 0x3b);
+			goto fin;
 		}
 		if (opecode == 0x34) {
 			s->vecPrfx = 2;
@@ -605,7 +620,7 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 			fcode_putR(s, i);
 			goto fin;
 		}
-		if (opecode == 0x1c0 || opecode == 0x1c1) {
+		if (opecode == 0x01c0 || opecode == 0x01c1) {
 			DecodeForLoop *dfl = &s->floop[s->floopDepth];
 			i = fcode_getInteger(s, len3table0);
 			j = fcode_getInteger(s, len3table0);
@@ -627,7 +642,7 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 				j = i;
 			s->flag4 ^= opecode & 1;
 
-			fcode_putRemark1c0(s, opecode & 1);
+			fcode_putRemark01c0(s, opecode & 1);
 
 			// api_openWin(i, j);
 			fcode_putRemark1(s);
@@ -684,8 +699,12 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 			s->wait_1c0 = s->floopDepth;
 			goto fin;
 		}
+		if (opecode == 0x01ff) {
+			fcode_putRemark01ff(s);
+			goto fin;
+		}
 		if (opecode == 0xfc0) {
-			fcode_putRemarkFc0(s);
+			fcode_putRemark0fc0(s);
 			printf("REM-FC0 : debug dump-00\n");
 			for (i = 0; i < 3; i++) {
 				for (j = 0; j < 0x40; j++) {
@@ -1137,6 +1156,28 @@ void fcode_putCmp(DecodeFcodeStr *s, int opecode, int bit0, int bit1, int r0, in
 	return;
 }
 
+void fcode_putTalloc(DecodeFcodeStr *s, int p, int r0, int bit0, int r1, int bit1)
+{
+	fcode_putOpecode1(s, 0xb0);
+	fcode_putR(s, r0);
+	fcode_putBit(s, bit0);
+	fcode_putR(s, r1);
+	fcode_putBit(s, bit1);
+	fcode_putP(s, p);
+	return;
+}
+
+void fcode_putTfree(DecodeFcodeStr *s, int p, int r0, int bit0, int r1, int bit1)
+{
+	fcode_putOpecode1(s, 0xb1);
+	fcode_putP(s, p);
+	fcode_putR(s, r0);
+	fcode_putBit(s, bit0);
+	fcode_putR(s, r1);
+	fcode_putBit(s, bit1);
+	return;
+}
+
 void fcode_putFlimm(DecodeFcodeStr *s, int bit, int f)
 {
 	fcode_putOpecode1(s, 0xfc);
@@ -1265,6 +1306,40 @@ void fcode_putRemark3(DecodeFcodeStr *s)
 	return;
 }
 
+void fcode_putRemark8(DecodeFcodeStr *s, int fmode, int tmode, int typ, int r, int p)
+{
+	if (s->hh4r.p.p < s->q + 16)
+		s->err = 1;
+	if (s->err == 0) {
+		s->q[ 0] = 0xfc;
+		s->q[ 1] = 0xfe;
+		s->q[ 2] = 0x88;
+		s->q[ 3] = 0x85;
+		s->q[ 4] = 0x80 | fmode;
+		s->q[ 5] = 0x80 | tmode;
+		s->q += 6;
+		fcode_putInt32(s, typ);
+		fcode_putR(s, r);
+		fcode_putP(s, p);
+	}
+	return;
+}
+
+void fcode_putRemark9(DecodeFcodeStr *s, int i)
+{
+	if (s->hh4r.p.p < s->q + 16)
+		s->err = 1;
+	if (s->err == 0) {
+		s->q[ 0] = 0xfc;
+		s->q[ 1] = 0xfe;
+		s->q[ 2] = 0x89;
+		s->q[ 3] = 0xf1;
+		s->q += 4;
+		fcode_putInt32(s, i);
+	}
+	return;
+}
+
 void fcode_putRemark34(DecodeFcodeStr *s)
 {
 	if (s->hh4r.p.p < s->q + 16)
@@ -1323,7 +1398,7 @@ void fcode_putRemark37(DecodeFcodeStr *s, int i)
 	return;
 }
 
-void fcode_putRemark1c0(DecodeFcodeStr *s, int i)
+void fcode_putRemark01c0(DecodeFcodeStr *s, int i)
 {
 	if (s->hh4r.p.p < s->q + 16)
 		s->err = 1;
@@ -1338,7 +1413,22 @@ void fcode_putRemark1c0(DecodeFcodeStr *s, int i)
 	return;
 }
 
-void fcode_putRemarkFc0(DecodeFcodeStr *s)
+void fcode_putRemark01ff(DecodeFcodeStr *s)
+{
+	if (s->hh4r.p.p < s->q + 16)
+		s->err = 1;
+	if (s->err == 0) {
+		s->q[ 0] = 0xfc;
+		s->q[ 1] = 0xfe;
+		s->q[ 2] = 0xfd;
+		s->q[ 3] = 0xff;
+		s->q[ 4] = 0xf0;
+		s->q += 5;
+	}
+	return;
+}
+
+void fcode_putRemark0fc0(DecodeFcodeStr *s)
 {
 	if (s->hh4r.p.p < s->q + 16)
 		s->err = 1;
@@ -1542,7 +1632,7 @@ void fcode_ope07(DecodeFcodeStr *s)
 	DecodeForLoop *dfl;
 	if (s->floopDepth == s->wait_1c0) {
 		s->wait_1c0 = -1;
-		fcode_putRemark1c0(s, 0);
+		fcode_putRemark01c0(s, 0);
 		fcode_putRemark1(s);
 		fcode_putLimm(s, 16, 0x30, 0x0002);
 		fcode_putCp(s, 16, 0x31, 0x03); // mod.
@@ -1925,6 +2015,197 @@ void fcode_opeFcmp(DecodeFcodeStr *s, int opecode)
 	return;
 }
 
+int fcode_rem08ui8(DecodeFcodeStr *s, int r, int p)
+{
+	int mod, len = -1, i, j, bit;
+	Hh4Reader hh4r;
+	BitReader br;
+	mod = hh4ReaderGetUnsigned(&s->hh4r);
+	if (mod == 4) {	// hh4, zero-term.
+		hh4r = s->hh4r;
+		do {
+			len++;
+		} while (hh4ReaderGetUnsigned(&hh4r) != 0);
+		fcode_putRemark8(s, mod, 0, 0x0003, r, p);
+		if (len > 0)
+			fcode_putLimm(s, 32, r, len);
+		else
+			fcode_putLimm(s, 32, r, 1);
+		fcode_putLimm(s, 32, 0x3b, 0x0003); // T_UINT8
+		fcode_putTalloc(s, p, 0x3b, 32, r, 32);
+		fcode_putPcp(s, 0x3b, p);
+		if (len > 0) {
+			for (i = 0; i < len; i++) {
+				s->getIntBit = BIT_UNKNOWN;
+				j = fcode_getInteger(s, len3table0);
+				bit = s->getIntBit;
+				if (bit == BIT_UNKNOWN)
+					bit = 8;
+				if (s->getIntTyp == 0) {
+					fcode_putLimm(s, bit, 0x3b, j);
+					j = 0x3b;
+				}
+				fcode_putOpecode1(s, 0x89);
+				fcode_putR(s, j);
+ 				fcode_putBit(s, bit);
+				fcode_putP(s, 0x3b);
+				fcode_putTyp(s, 0x0003);
+				fcode_putInt32(s, 0);
+				fcode_putLimm(s, 32, 0x3f, 1);
+				fcode_putPadd(s, 32, 0x3b, 0x0003, 0x3b, 0x3f);
+			}
+		} else {
+			fcode_putOpecode1(s, 0x89);
+			fcode_putR(s, s->rep[0][0]);
+ 			fcode_putBit(s, 8);
+			fcode_putP(s, 0x3b);
+			fcode_putTyp(s, 0x0003);
+			fcode_putInt32(s, 0);
+			fcode_putLimm(s, 32, 0x3f, 1);
+			fcode_putPadd(s, 32, 0x3b, 0x0003, 0x3b, 0x3f);
+			len = 1;
+		}
+		hh4ReaderGetUnsigned(&s->hh4r);	// zero-term
+		goto fin;
+	}
+	if (mod == 5) {	// [special] 7bit-string, (len-4).
+		len = hh4ReaderGetUnsigned(&s->hh4r) + 4;
+		fcode_putLimm(s, 32, r, len);
+		fcode_putLimm(s, 32, 0x3b, 0x0003); // T_UINT8
+		fcode_putTalloc(s, p, 0x3b, 32, r, 32);
+		fcode_putPcp(s, 0x3b, p);
+		bitReaderInit(&br, &s->hh4r);
+		for (i = 0; i < len; i++) {
+			j = bitReaderGetNbitUnsigned(&br, 7);
+			fcode_putLimm(s, 8, 0x3b, j);
+			fcode_putOpecode1(s, 0x89);
+			fcode_putR(s, 0x3b);
+ 			fcode_putBit(s, 8);
+			fcode_putP(s, 0x3b);
+			fcode_putTyp(s, 0x0003);
+			fcode_putInt32(s, 0);
+			fcode_putLimm(s, 32, 0x3f, 1);
+			fcode_putPadd(s, 32, 0x3b, 0x0003, 0x3b, 0x3f);
+		}
+		goto fin;
+	}
+	if (mod == 6) {	// [special] 7bit-string, zero-term.
+		hh4r = s->hh4r;
+		bitReaderInit(&br, &hh4r);
+		do {
+			len++;
+		} while (bitReaderGetNbitUnsigned(&br, 7) != 0);
+		fcode_putRemark8(s, mod, 0, 0x0003, r, p);
+		fcode_putLimm(s, 32, r, len);
+		fcode_putLimm(s, 32, 0x3b, 0x0003); // T_UINT8
+		fcode_putTalloc(s, p, 0x3b, 32, r, 32);
+		fcode_putPcp(s, 0x3b, p);
+		bitReaderInit(&br, &s->hh4r);
+		for (i = 0; i < len; i++) {
+			j = bitReaderGetNbitUnsigned(&br, 7);
+			fcode_putLimm(s, 8, 0x3b, j);
+			fcode_putOpecode1(s, 0x89);
+			fcode_putR(s, 0x3b);
+ 			fcode_putBit(s, 8);
+			fcode_putP(s, 0x3b);
+			fcode_putTyp(s, 0x0003);
+			fcode_putInt32(s, 0);
+			fcode_putLimm(s, 32, 0x3f, 1);
+			fcode_putPadd(s, 32, 0x3b, 0x0003, 0x3b, 0x3f);
+		}
+		bitReaderGetNbitUnsigned(&br, 7);	// zero-term
+		goto fin;
+	}
+
+	fprintf(stderr, "fcode_rem08ui8: unknown mode=%d\n", mod);
+	exit(1);
+fin:
+	return len;
+}
+
+int fcode_rem08si32(DecodeFcodeStr *s, int r, int p)
+{
+	int mod, len = -1, i, j, bit;
+	mod = hh4ReaderGetUnsigned(&s->hh4r);
+	if (mod == 1) {	// len, hh4
+		len = hh4ReaderGetUnsigned(&s->hh4r);
+		fcode_putLimm(s, 32, r, len);
+		fcode_putLimm(s, 32, 0x3b, 0x0006); // T_SINT32
+		fcode_putTalloc(s, p, 0x3b, 32, r, 32);
+		fcode_putPcp(s, 0x3b, p);
+		for (i = 0; i < len; i++) {
+			s->getIntBit = BIT_UNKNOWN;
+			j = fcode_getInteger(s, len3table0);
+			bit = s->getIntBit;
+			if (bit == BIT_UNKNOWN)
+				bit = 32;
+			if (s->getIntTyp == 0) {
+				fcode_putLimm(s, bit, 0x3b, j);
+				j = 0x3b;
+			}
+			fcode_putOpecode1(s, 0x89);
+			fcode_putR(s, j);
+			fcode_putBit(s, bit);
+			fcode_putP(s, 0x3b);
+			fcode_putTyp(s, 0x0006);
+			fcode_putInt32(s, 0);
+			fcode_putLimm(s, 32, 0x3f, 1);
+			fcode_putPadd(s, 32, 0x3b, 0x0006, 0x3b, 0x3f);
+		}
+		goto fin;
+	}
+
+	fprintf(stderr, "fcode_rem08si32: unknown mode=%d\n", mod);
+	exit(1);
+fin:
+	return len;
+}
+
+void fcode_api0001(DecodeFcodeStr *s)
+// api_putString.
+{
+	int i, j;
+	fcode_putRemark1(s);
+	fcode_putLimm(s, 16, 0x30, 0x0001);
+	if (s->flag4 == 0) {
+		fcode_putRemark9(s, 0);
+		i = fcode_rem08ui8(s, 0x31, 0x31);
+		fcode_putLimm(s, 32, 0x32, 0);
+		fcode_putLimm(s, 32, 0x33, 0);
+		fcode_putLimm(s, 32, 0x34, 0);
+	 	fcode_putPcallP2f(s);
+		fcode_putLimm(s, 32, 0x3a, i);
+		fcode_putLimm(s, 32, 0x3b, 0x0003); // T_UINT8
+		fcode_putTfree(s, 0x3f, 0x3b, 32, 0x3a, 32);
+ 		fcode_unknownBitR(s, 0x30, 0x34);
+ 		fcode_unknownBitR(s, 0x3a, 0x3b);
+		goto fin;
+	}
+	s->flag4 = 0;
+	j = hh4ReaderGetUnsigned(&s->hh4r);
+	if (j == 0) {
+		fcode_putRemark9(s, 1);
+		i = fcode_rem08ui8(s, 0x31, 0x31);
+		j = fcode_rem08si32(s, 0x32, 0x32);
+		fcode_putLimm(s, 32, 0x33, 0);
+		fcode_putLimm(s, 32, 0x34, 0);
+	 	fcode_putPcallP2f(s);
+		fcode_putLimm(s, 32, 0x3a, j);
+		fcode_putLimm(s, 32, 0x3b, 0x0006); // T_SINT32
+		fcode_putTfree(s, 0x3f, 0x3b, 32, 0x3a, 32);
+		fcode_putLimm(s, 32, 0x3a, i);
+		fcode_putLimm(s, 32, 0x3b, 0x0003); // T_UINT8
+		fcode_putTfree(s, 0x3f, 0x3b, 32, 0x3a, 32);
+ 		fcode_unknownBitR(s, 0x30, 0x34);
+ 		fcode_unknownBitR(s, 0x3a, 0x3b);
+		goto fin;
+	}
+	fprintf(stderr, "fcode_api0001: error: rem09 = %d\n", j);
+	exit(1);
+fin:
+	return;
+}
+
 void fcode_api0002(DecodeFcodeStr *s)
 // api_drawPoint(mod, c, x, y).
 {
@@ -1962,8 +2243,8 @@ void fcode_api0003(DecodeFcodeStr *s)
 		fcode_putCp(s, 32, 0x32, 0x00); // c.
 		fcode_putCp(s, 16, 0x33, 0x01); // x0.
 		fcode_putCp(s, 16, 0x34, 0x02); // y0.
-		fcode_putCp(s, 16, 0x35, 0x03); // x0.
-		fcode_putCp(s, 16, 0x36, 0x04); // y0.
+		fcode_putCp(s, 16, 0x35, 0x03); // x1.
+		fcode_putCp(s, 16, 0x36, 0x04); // y1.
 		s->flag4 = 0;
 	}
 	fcode_putPcallP2f(s);
@@ -1982,8 +2263,8 @@ void fcode_api0004(DecodeFcodeStr *s)
 		fcode_putLimmOrCp(s, 32, 0x32); // c.
 		fcode_putLimmOrCp(s, 16, 0x33); // xsiz.
 		fcode_putLimmOrCp(s, 16, 0x34); // ysiz.
-		fcode_putLimmOrCp(s, 16, 0x35); // x1.
-		fcode_putLimmOrCp(s, 16, 0x36); // y1.
+		fcode_putLimmOrCp(s, 16, 0x35); // x0.
+		fcode_putLimmOrCp(s, 16, 0x36); // y0.
 	} else {
 		fcode_putCp(s, 32, 0x32, 0x00); // c.
 		fcode_putCp(s, 16, 0x33, 0x01); // xsiz.
@@ -2020,6 +2301,61 @@ void fcode_api0005(DecodeFcodeStr *s)
 	}
 	fcode_putPcallP2f(s);
 	fcode_unknownBitR(s, 0x30, 0x36);
+	return;
+}
+
+void fcode_api0006(DecodeFcodeStr *s)
+// api_drawString.
+{
+	int i, j;
+	fcode_putRemark1(s);
+	fcode_putLimm(s, 16, 0x30, 0x0006);
+	if (s->flag4 == 0) {
+		fcode_putRemark9(s, 0);
+		fcode_putLimmOrCp(s, 16, 0x31); // mod.
+		fcode_putLimmOrCp(s, 32, 0x32); // c.
+		fcode_putLimmOrCp(s, 16, 0x33); // xsiz.
+		fcode_putLimmOrCp(s, 16, 0x34); // ysiz.
+		fcode_putLimmOrCp(s, 16, 0x35); // x0.
+		fcode_putLimmOrCp(s, 16, 0x36); // y0.
+		i = fcode_rem08ui8(s, 0x37, 0x31);
+		fcode_putLimm(s, 32, 0x38, 0);
+		fcode_putLimm(s, 32, 0x39, 0);
+		fcode_putLimm(s, 32, 0x3a, 0);
+	 	fcode_putPcallP2f(s);
+		fcode_putLimm(s, 32, 0x3a, i);
+		fcode_putLimm(s, 32, 0x3b, 0x0003); // T_UINT8
+		fcode_putTfree(s, 0x3f, 0x3b, 32, 0x3a, 32);
+ 		fcode_unknownBitR(s, 0x30, 0x3b);
+		goto fin;
+	}
+	s->flag4 = 0;
+	j = hh4ReaderGetUnsigned(&s->hh4r);
+	if (j == 0) {
+		fcode_putRemark9(s, 1);
+		fcode_putLimmOrCp(s, 16, 0x31); // mod.
+		fcode_putLimmOrCp(s, 32, 0x32); // c.
+		fcode_putLimmOrCp(s, 16, 0x33); // xsiz.
+		fcode_putLimmOrCp(s, 16, 0x34); // ysiz.
+		fcode_putLimmOrCp(s, 16, 0x35); // x0.
+		fcode_putLimmOrCp(s, 16, 0x36); // y0.
+		i = fcode_rem08ui8(s, 0x37, 0x31);
+		j = fcode_rem08si32(s, 0x38, 0x32);
+		fcode_putLimm(s, 32, 0x39, 0);
+		fcode_putLimm(s, 32, 0x3a, 0);
+	 	fcode_putPcallP2f(s);
+		fcode_putLimm(s, 32, 0x3a, j);
+		fcode_putLimm(s, 32, 0x3b, 0x0006); // T_SINT32
+		fcode_putTfree(s, 0x3f, 0x3b, 32, 0x3a, 32);
+		fcode_putLimm(s, 32, 0x3a, i);
+		fcode_putLimm(s, 32, 0x3b, 0x0003); // T_UINT8
+		fcode_putTfree(s, 0x3f, 0x3b, 32, 0x3a, 32);
+ 		fcode_unknownBitR(s, 0x30, 0x3b);
+		goto fin;
+	}
+	fprintf(stderr, "fcode_api0006: error: rem09 = %d\n", j);
+	exit(1);
+fin:
 	return;
 }
 
@@ -2074,6 +2410,24 @@ void fcode_api0010(DecodeFcodeStr *s)
 	return;
 }
 
+void fcode_api07c0(DecodeFcodeStr *s)
+// junkApi_fileRead(arg).
+{
+	int r, p;
+	fcode_putRemark1(s);
+	fcode_putLimm(s, 16, 0x30, 0x07c0);
+	fcode_putLimmOrCp(s, 16, 0x31); // arg.
+	fcode_putPcallP2f(s);
+	r = fcode_getReg(s, 0, MODE_REG_LC3);
+	p = fcode_getReg(s, 1, MODE_REG_LC3);
+	fcode_putCp(s, 32, r, 0x30);
+	fcode_putPcp(s, p, 0x31);
+	fcode_updateRep(s, 0, r);
+	fcode_updateRep(s, 1, p);
+	s->bitR[0x30] = 32;
+	return;
+}
+
 int fcode_getInt32(const unsigned char *p)
 {
 	return p[2] << 24 | p[3] << 16 | p[4] << 8 | p[5];
@@ -2102,7 +2456,7 @@ int fcode_getInstrLength(const unsigned char *p)
 		getTypSize(i, &typSize0, &typSize1, &typSign);
 		len = 1 + 6 + 6 + (typSize0 * j / 8);
 	}
-	if (ope == 0xb2) len = 16;
+	if (0xb0 <= ope && ope <= 0xb3) len = 16;
 	if (0xbc <= ope && ope <= 0xbd) len = 37;
 	if (ope == 0xfc && p[1] == 0x40 && p[2] == 0x80) len = 16;	// FLIMM0
 	if (ope == 0xfc && p[1] == 0x40 && p[2] == 0x81) len = 22;	// FLIMM1
@@ -2116,13 +2470,15 @@ int fcode_getInstrLength(const unsigned char *p)
 		if (ope1 == 0x00 || ope1 == 0x10 || ope1 == 0x30)
 			len = 3;	// putRemark0, putRemark1, putRemark3
 		if (ope1 == 0x21) len = 3 + 6;	// putRemark2
+		if (ope1 == 0x88) len = 14;
+		if (ope1 == 0x89) len = 4 + 6;	// putRemark9
 		if (ope1 == 0xb4 || ope1 == 0xb6)
 			len = 4;
 		if (ope1 == 0xb5 || ope1 == 0xb7)
 			len = 10;
-		if (ope1 == 0xfd && p[3] == 0xc0 && p[4] == 0xf0) len = 5;
-		if (ope1 == 0xfd && p[3] == 0xc1 && p[4] == 0xf0) len = 5;
-		if (ope1 == 0xef && p[3] == 0xc0 && p[4] == 0xf0) len = 5;
+		if (ope1 == 0xfc && p[4] == 0xf0) len = 5;
+		if (ope1 == 0xfd && p[4] == 0xf0) len = 5;
+		if (0xe0 <= ope1 && ope1 <= 0xef && p[4] == 0xf0) len = 5;
 	}
 	if (len == 0) {
 		fprintf(stderr, "fcode_getInstrLength: internal error: ope=0x%02X 0x%02X 0x%02X\n", ope, p[1], p[2]);

@@ -145,3 +145,15 @@
   bit9-11:gray-scale-color
   bit8が1で、bit0-1が0だと、3に補正される。
 
+2014.08.01金:
+  REM08のfcode-modeについて:
+    rev1のときはこうしていたようだ:
+		0: len, ascii
+		1: len, hh4
+		2: len, Pxx
+		3: ascii, zero-term. (0に対応している)
+		4: hh4, zero-term. (1に対応している)
+		5: [special] 7bit-string, (len-4)
+		6: [special] 7bit-string, zero-term.
+	rev2でも基本的にこれを踏襲する.
+

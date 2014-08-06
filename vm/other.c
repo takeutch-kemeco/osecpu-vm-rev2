@@ -107,6 +107,10 @@ int jitcStepOther(OsecpuJitc *jitc)
 		jitcSetHh4BufferSimple(jitc, 3);
 		imm = ip[1]; i = ip[2];
 		jitc->instrLength = 0; // Ž©‘O‚Åˆ—‚·‚é‚Ì‚ÅA‚±‚Ì’l‚Í0‚É‚·‚é.
+		if (imm == 0x01ff && i == 0) {
+			ip[0] = 0x01ff;
+			jitc->instrLength = 1;
+		}
 		for (j = 0; j < i; j++)
 			hh4ReaderGetUnsigned(&jitc->hh4r); // “Ç‚ÝŽÌ‚Ä‚é.
 		goto fin;
@@ -257,6 +261,11 @@ void execStepOther(OsecpuVm *vm)
  		if (0 <= r && r <= 3)
 			vm->dr[r] = imm;
 		ip += 3;
+		goto fin;
+	}
+	if (opecode == 0x01ff) {
+		vm->toDebugMonitor = 1;
+		ip++;
 		goto fin;
 	}
 fin:
@@ -439,4 +448,10 @@ fin:
 	return retcode;
 }
 
+int osecpuVmPtrCtrlInit(OsecpuVm *vm, int size)
+{
+	vm->ptrCtrl = malloc(size * sizeof (PtrCtrl));
+	vm->ptrCtrlSize = size;
+	return 0;
+}
 

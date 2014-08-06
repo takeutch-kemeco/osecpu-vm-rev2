@@ -76,6 +76,8 @@ typedef struct _OsecpuVm {
 	int errorCode;
 	unsigned char prefix2f[PREFIX2F_SIZE];
 	char *stack0, *stack1, *stackTop;
+	PtrCtrl *ptrCtrl;
+	int ptrCtrlSize;
 	char toDebugMonitor, exitToDebug, debugAutoFlsh;
 	int debugBreakPointIndex;
 	Int32 debugBreakPointValue;
@@ -197,6 +199,7 @@ int jitcStepOther(OsecpuJitc *jitc);
 int jitcAfterStepOther(OsecpuJitc *jitc);
 void execStepOther(OsecpuVm *vm);
 int osecpuVmStackInit(OsecpuVm *vm, int stackSize);
+int osecpuVmPtrCtrlInit(OsecpuVm *vm, int size);
 
 // extend.c : Šg’£–½—ßŠÖŒW.
 void jitcInitExtend(OsecpuJitc *jitc);
