@@ -227,9 +227,9 @@ int jitcAll(OsecpuJitc *jitc)
 	jitcInitDstLogSetPhase(jitc, 0);
 	for (;;) {
 		// —‘z‚Í“K“–‚ÈãŒÀ‚ðŒˆ‚ß‚ÄA‹x‚Ý‹x‚Ý‚Å‚â‚é‚×‚«‚©‚à‚µ‚ê‚È‚¢.
+		if (hh4ReaderEnd(&jitc->hh4r) != 0) break;
 		jitcStep(jitc);
 		if (jitc->errorCode != 0) break;
-		if (hh4ReaderEnd(&jitc->hh4r) != 0) break;
 	}
 	if (jitc->errorCode != 0) goto fin;
 	jitc->hh4r.p = src0;
@@ -251,7 +251,8 @@ int execStep(OsecpuVm *vm)
 {
 	const Int32 *ip = vm->ip;
 	vm->errorCode = 0;
-	execStepDebug(vm);
+	if (vm->disableDebug == 0)
+		execStepDebug(vm);
 	if (ip >= vm->ip1) {
  		vm->errorCode = EXEC_SRC_OVERRUN;
 		goto fin;
@@ -277,7 +278,7 @@ int execAll(OsecpuVm *vm)
 		// —‘z‚Í“K“–‚ÈãŒÀ‚ðŒˆ‚ß‚ÄA‹x‚Ý‹x‚Ý‚Å‚â‚é‚×‚«‚©‚à‚µ‚ê‚È‚¢.
 		execStep(vm);
 		if (vm->errorCode != 0) {
-			if (vm->errorCode != EXEC_SRC_OVERRUN && vm->errorCode != EXEC_API_END) {
+			if (vm->disableDebug == 0 && vm->errorCode != EXEC_SRC_OVERRUN && vm->errorCode != EXEC_EXIT) {
 				vm->toDebugMonitor = 1;
 				execStepDebug(vm);
 			}

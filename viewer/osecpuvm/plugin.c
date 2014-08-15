@@ -2,10 +2,11 @@
 
 void apiInit(OsecpuVm *vm, void *apiFunc);
 
-int execPlugIn(const unsigned char *path, void *apiFunc, void *env, int bsiz)
+int execPlugIn(const unsigned char *path, void *apiFunc, void *env, int bsiz, int flags)
 // path: プラグインのパス.
 // apiFunc: P2Fの処理関数.
 // env: 追加環境情報.
+// flags: 1:disableDebug
 {
 	Defines defs;
 	OsecpuJitc jitc;
@@ -17,6 +18,7 @@ int execPlugIn(const unsigned char *path, void *apiFunc, void *env, int bsiz)
 	FILE *fp;
 	jitc.defines = &defs;
 	vm.defines = &defs;
+	vm.disableDebug = flags & 1;
 	vm.toDebugMonitor = 0;
 	vm.exitToDebug = 0;
 	vm.debugAutoFlsh = 1;
@@ -78,7 +80,7 @@ int execPlugIn(const unsigned char *path, void *apiFunc, void *env, int bsiz)
 
 	apiInit(&vm, apiFunc);
 	rc = execAll(&vm);
-	if (rc != EXEC_SRC_OVERRUN && rc != EXEC_API_END)
+	if (rc != EXEC_SRC_OVERRUN && rc != EXEC_EXIT)
 		rc = OSECPUVM_DOWN;
 	else
 		rc = OSECPUVM_END;

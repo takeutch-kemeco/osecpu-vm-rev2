@@ -156,6 +156,7 @@ void apiInit(OsecpuVm *vm, int argc, const unsigned char **argv)
 	}
 	vm->p[0x2f].typ = PTR_TYP_NATIVECODE;
 	vm->p[0x2f].p = (void *) &apiEntry;
+	vm->disableDebug = 0;
 	vm->debugWatchIndex[0] = 0;
 	vm->debugWatchIndex[1] = 1;
 	vm->debugWatchs = 0;
@@ -234,13 +235,13 @@ void apiEnd(OsecpuVm *vm, Int32 retcode)
 			drv_flshWin(v_xsiz, v_ysiz, 0, 0);
 		while (apiWork.winClosed == 0) {
 			drv_sleep(100);
-			if (vm->toDebugMonitor == 1)
+			if (vm->disableDebug == 0 && vm->toDebugMonitor == 1)
 				execStepDebug(vm);
 		}
 	}
 	if (apiWork.lastConsoleChar != '\n')
 		putchar('\n');
-	if (vm->exitToDebug != 0) {
+	if (vm->disableDebug == 0 && vm->exitToDebug != 0) {
 		jitcSetRetCode(&vm->errorCode, EXEC_EXIT);
 		vm->toDebugMonitor = 1;
 		execStepDebug(vm);

@@ -90,9 +90,9 @@ int jitcAll(OsecpuJitc *jitc)
 	jitcInitDstLogSetPhase(jitc, 0);
 	for (;;) {
 		// —‘z‚Í“K“–‚ÈãŒÀ‚ðŒˆ‚ß‚ÄA‹x‚Ý‹x‚Ý‚Å‚â‚é‚×‚«‚©‚à‚µ‚ê‚È‚¢.
+		if (jitc->src >= jitc->src1) break;
 		jitcStep(jitc);
 		if (jitc->errorCode != 0) break;
-		if (jitc->src >= jitc->src1) break;
 	}
 	if (jitc->errorCode != 0) goto fin;
 	jitc->src = src0;

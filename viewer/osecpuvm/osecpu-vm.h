@@ -78,7 +78,7 @@ typedef struct _OsecpuVm {
 	char *stack0, *stack1, *stackTop, *stack00;
 	PtrCtrl *ptrCtrl;
 	int ptrCtrlSize;
-	char toDebugMonitor, exitToDebug, debugAutoFlsh;
+	char disableDebug, toDebugMonitor, exitToDebug, debugAutoFlsh;
 	int debugBreakPointIndex;
 	Int32 debugBreakPointValue;
 	int debugWatchIndex[2], debugWatchs;
@@ -145,7 +145,6 @@ int execAll(OsecpuVm *vm);
 #define EXEC_EXIT				12+256
 #define EXEC_MALLOC_ERROR		13+256
 #define EXEC_MFREE_ERROR		14+256
-#define EXEC_API_END			15+256
 #define EXEC_ABORT_OPECODE_M1	0xffff
 
 #define EXEC_CMA_FLAG_SEEK		1
@@ -222,7 +221,7 @@ void execStepDebug(OsecpuVm *vm);
 int tek_lzrestore_tek5(int srcsiz, unsigned char *src, int outsiz, unsigned char *outbuf);
 
 // plugin.c : ƒvƒ‰ƒOƒCƒ“ŠÖŒW.
-int execPlugIn(const unsigned char *path, void *apiFunc, void *env, int bsiz);
+int execPlugIn(const unsigned char *path, void *apiFunc, void *env, int bsiz, int flags);
 #define OSECPUVM_END				0
 #define OSECPUVM_DOWN				1
 #define OSECPUVM_FILE_NOT_FOUND		2

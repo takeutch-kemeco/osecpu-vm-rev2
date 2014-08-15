@@ -1,0 +1,89 @@
+#include "osecpu_ask.h"
+
+	// http://www.kk.iij4u.or.jp/~kondo/bmp/ ÇéQçlÇ…ÇµÇ‹ÇµÇΩ.
+
+%define L_err			LOCAL(0)
+
+LOCALLABELS(1);
+
+	Int32s fsiz:R00, i:R01, c0:R02, c1:R03, c2:R04, c3:R05, bm0:R08, bm1:R09;
+	Int32s ofs:R02, size:R03, width:R04, height:R05, bitCount:R06, compr:R07;
+
+	Int32s c:R00, x:R01, y:R02, align:R03, yy:R06, gg:R07, rr:R08;
+	VPtr p0:P01, p:P02, si32:P03;
+
+	junkApi_fileRead(fsiz, p0, 1);
+	if (fsiz < 54) goto err;
+	api_malloc_initInt(si32, T_SINT32, 6, 0);
+	p = p0;
+	REM34();
+	LMEM0PP(32, bm0, T_UINT8, p); // bm0 = *p++;
+	LMEM0PP(32, bm1, T_UINT8, p);
+	PADDI(32, p, T_UINT8, p, 8);
+	for (i = 0; i != 6; i++) {
+		REM35(4);
+		LMEM0PP(32, c0, T_UINT8, p);
+		LMEM0PP(32, c1, T_UINT8, p);
+		LMEM0PP(32, c2, T_UINT8, p);
+		LMEM0PP(32, c3, T_UINT8, p);
+		AFFINE(32, c2, 256, c3, c2);	// c3 <<= 8; c2 += c3;
+		AFFINE(32, c1, 256, c2, c1);	// c2 <<= 8; c1 += c2;
+		AFFINE(32, c0, 256, c1, c0);	// c1 <<= 8; c0 += c1;
+		PASMEM0(32, c0, T_SINT32, si32, i);
+	}
+	REM35(6);
+	LMEM0PP(32, ofs,      T_SINT32, si32); // ofs = *si32++;
+	LMEM0PP(32, size,     T_SINT32, si32);
+	LMEM0PP(32, width,    T_SINT32, si32);
+	LMEM0PP(32, height,   T_SINT32, si32);
+	LMEM0PP(32, bitCount, T_SINT32, si32);
+	LMEM0PP(32, compr,    T_SINT32, si32);
+	if (bm0 == 0x42) {
+		if (bm1 == 0x4d) {
+			if (size == 0x28) {
+				if (width > 0) {
+					if (width <= 0x7fff) {
+						if (height > 0) {
+							if (height <= 0x7fff) {
+								if (bitCount == 0x00180001) {
+									if (compr == 0) {
+										i = 0;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	if (i != 0) {
+LB0(L_err);
+		api_putString('format error');
+		api_end();
+	}
+	i = width * 3;
+	align = 0 - i;
+	align &= 3;
+	i += align;
+	i *= height;
+	i += ofs;
+	if (i > fsiz) goto err;
+	api_openWin(width, height);
+	PADD(32, p, T_UINT8, p0, ofs);
+	y = height;
+	for (yy = 0; yy != height; yy++) {
+		y--;
+		for (x = 0; x != width; x++) {
+			LMEM0PP(32, c,  T_UINT8, p);
+			REM34();
+			LMEM0PP(32, gg, T_UINT8, p);
+			LMEM0PP(32, rr, T_UINT8, p);
+			c += gg;
+			c += rr;
+			c /= 3;
+			api_drawPoint(MODE_MON8, c, x, y);
+		}
+		PADD(32, p, T_UINT8, p, align);
+	}
+

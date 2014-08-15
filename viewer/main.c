@@ -51,7 +51,7 @@ err:
 		sprintf(env.pathPlugin, "plugin%02d.ose", i);
 		env.retcode = 0;
 		env.winClosed = 0;
-		retcode = execPlugIn(env.pathPlugin, &apiEntry, &env, BUFFER_SIZE);
+		retcode = execPlugIn(env.pathPlugin, &apiEntry, &env, BUFFER_SIZE, 1);
 		if (env.retcode == 1) continue; // format errorなら次のプラグインへ.
 		if (retcode == OSECPUVM_END) break; // ダウンせずに最後まで実行したのならbreak.
 		if (retcode == OSECPUVM_DOWN)
@@ -88,12 +88,12 @@ const Int32 *apiEntry(OsecpuVm *vm)
 	}
 	if (func == 0x0001) {	// api0001_putString
 		env->retcode = 1;
-		jitcSetRetCode(&vm->errorCode, EXEC_API_END); // これで強制終了できる.
+		jitcSetRetCode(&vm->errorCode, EXEC_EXIT); // これで強制終了できる.
 		goto fin;
  	}
 	if (func == 0x0009) {	// api0009_sleep
 		if (vram != 0) {
-			jitcSetRetCode(&vm->errorCode, EXEC_API_END); // これで強制終了できる.
+			jitcSetRetCode(&vm->errorCode, EXEC_EXIT); // これで強制終了できる.
 			goto fin;
 		}
 	}
