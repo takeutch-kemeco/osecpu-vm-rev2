@@ -1,0 +1,1 @@
+c:\mingw\bin\gcc.exe -o picview.exe -Os osecpuvm/osecpu-vm.c osecpuvm/other.c osecpuvm/integer.c osecpuvm/pointer.c osecpuvm/float.c osecpuvm/extend.c osecpuvm/driver.c osecpuvm/decode.c osecpuvm/tek.c osecpuvm/debug.c osecpuvm/plugin.c main.c -Wall -Wl,-s,-lgdi32

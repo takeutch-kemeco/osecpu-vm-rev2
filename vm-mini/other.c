@@ -221,6 +221,7 @@ int osecpuVmStackInit(OsecpuVm *vm, int stackSize)
 	StackHeader *psh;
 	if (stackSize < STACKHEADERSIZE16) goto fin;
 	vm->stack0 = malloc(stackSize);
+	vm->stack00 = vm->stack0;
 	if (vm->stack0 == NULL) goto fin;
 	vm->stack1 = vm->stack0 + stackSize;
 	psh = (StackHeader *) vm->stack0;

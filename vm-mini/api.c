@@ -812,7 +812,7 @@ void api07c0_fileRead(OsecpuVm *vm)
 {
 	int i, fsiz;
 	FILE *fp;
-	unsigned char *fbuf = (unsigned char *) malloc(2 * 1024 * 1024 + 1); // 2MB
+	unsigned char *fbuf = (unsigned char *) malloc(8 * 1024 * 1024 + 1); // 8MB
 //	unsigned char *bit;
 	i = execStep_getRxx(vm, 0x31, 16);
 
@@ -830,10 +830,10 @@ err:
 		fprintf(stderr, "api07c0_fileRead: fopen error: %s\n", apiWork.argv[i]);
 		goto err;
 	}
-	fsiz = fread(fbuf, 1, 2 * 1024 * 1024 + 1, fp);
+	fsiz = fread(fbuf, 1, 8 * 1024 * 1024 + 1, fp);
 	fclose(fp);
-	if (fsiz > 2 * 1024 * 1024) {
-		fprintf(stderr, "api07c0_fileRead: too large file (max:2MB): %s\n", apiWork.argv[i]);
+	if (fsiz > 8 * 1024 * 1024) {
+		fprintf(stderr, "api07c0_fileRead: too large file (max:8MB): %s\n", apiWork.argv[i]);
 		goto err;
 	}
 //	bit = (unsigned char *) malloc(fsiz);

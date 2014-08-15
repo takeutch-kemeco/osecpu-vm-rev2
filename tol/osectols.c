@@ -182,7 +182,7 @@ int main(int argc, const UCHAR **argv)
 			 "  lbstk  ver.0.04\n"//117
 			 "  db2bin ver.0.23\n"//125
 			 "  disasm ver.0.02\n"
-			 "  appack ver.0.27\n"//125
+			 "  appack ver.0.28\n"//126
 			 "  maklib ver.0.01\n"
 			 "  getint ver.0.06\n"
 			 "  osastr ver.0.00\n"
@@ -190,7 +190,7 @@ int main(int argc, const UCHAR **argv)
 		//	 "  fcode  ver.0.00\n"
 			 "  b32    ver.0.01\n"  //118
 			 "  dumpbk ver.0.05\n"  //125
-			 "  dumpfr ver.0.03"  //124
+			 "  dumpfr ver.0.04"  //126
 
 		);
 		r = 1;
@@ -3804,7 +3804,9 @@ void appack_initWork(AppackWork *aw)
 		for (j = 0; j < 0x40; j++)
 			aw->rep[i][j] = j;
 	}
-	for (j = 0; j < 8; j++)
+	for (j = 0; j < 0x40; j++)
+		aw->rep[3][j] = 0;
+	for (j = 0; j < 0x20; j++)
 		aw->rep[3][j] = 2 << j;
 
 	aw->opTbl[0x14] = 0x00;
@@ -5062,7 +5064,7 @@ appack0_bc:
 			p += 34 + 14;
 			continue;
 		}
-		if (cmpBytes(p, "f2_f788#4_Yx_f78800000020") != 0) {	// LIMM
+		if (cmpBytes(p, "f2_f788#4_Yx_f78800000020") != 0) {	// appack:LIMM
 			appack0_waitFlush(&aw);
 			i = p[7] & 0x3f;
 			j = p[3] << 24 | p[4] << 16 | p[5] << 8 | p[6];
@@ -5087,7 +5089,7 @@ appack0_bc:
 			}
 			continue;
 		}
-		if (cmpBytes(p, "f3_f788#4_b0 f3_f788#4_bf f1_f788#4_f78800000003 fcfe00") != 0) {	// CALL
+		if (cmpBytes(p, "f3_f788#4_b0 f3_f788#4_bf f1_f788#4_f78800000003 fcfe00") != 0) {	// appack:CALL
 			i = p[ 3] << 24 | p[ 4] << 16 | p[ 5] << 8 | p[ 6];
 			j = p[19] << 24 | p[20] << 16 | p[21] << 8 | p[22];
 			k = p[11] << 24 | p[12] << 16 | p[13] << 8 | p[14];
@@ -5207,7 +5209,8 @@ appack0_bc:
 			continue;
 		}
 		if (cmpBytes(p, "8e_Yx_f788#4_Yx_f78800000020_bf 88_bf_f788#4_f78800000000_Yx_f78800000020") != 0) {
-			// PALMEM0
+			// appack:PALMEM0
+			appack0_waitFlush(&aw);
 			i = p[1] & 0x3f; // p
 			j = p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7];	// typ
 			k = p[8] & 0x3f; // offset-r
@@ -5233,7 +5236,8 @@ appack0_bc:
 			continue;
 		}
 		if (cmpBytes(p, "8e_Yx_f788#4_Yx_f78800000020_bf 89_Yx_f78800000020_bf_f788#4_f78800000000") != 0) {
-			// PASMEM0
+			// appack:PASMEM0
+			appack0_waitFlush(&aw);
 			i = p[1] & 0x3f; // p
 			j = p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7];	// typ
 			k = p[8] & 0x3f; // offset-r
@@ -5259,6 +5263,8 @@ appack0_bc:
 			continue;
 		}
 		if (cmpBytes(p, "8e_Yx_f788#4_Yx_f78800000020_Yx") != 0) {
+			// appack:PADD
+			appack0_waitFlush(&aw);
 			i = p[1] & 0x3f; // p1
 			j = p[4] << 24 | p[5] << 16 | p[6] << 8 | p[7];	// typ
 			k = p[8] & 0x3f; // r
@@ -5278,20 +5284,21 @@ appack0_bc:
 			appackSub1p(&aw, i, 0);
 			if (flgD != 0)
 				appackSub1u(&aw, j);
-			if (k != 0x3f) {
-				k |= 80520000;
-				appack_updateRep(&aw, 0, k);
-			} else
+			if (k != 0x3f)
+				k |= 0x80520000;
+			else
 				k = aw.immR3f;
 			appackSub1i(&aw, k, len3table14);
 			if (flg4 != 0)
 				appackSub1p(&aw, l, MODE_REG_LC3);
+			if (k != aw.immR3f)
+				appack_updateRep(&aw, 0, k & 0x3f);
 			appack_updateRep(&aw, 1, i);
 			appack_updateRep(&aw, 1, l);
 			continue;
 		}
 		if (cmpBytes(p, "90YxYxYx_f788") != 0 && p[2] == p[1]) {
-			// CP
+			// appack:CP
 			appack0_waitFlush(&aw);
 			i = p[1] & 0x3f;
 			j = p[3] & 0x3f;
@@ -8301,6 +8308,10 @@ int dumpfr(struct Work *w)
 				flag4 = 0;
 				continue;
 			}
+			if (i == 0x07c0) {
+				dumpfr_skipHh4(&hh4r, 3);
+				continue;
+			}
 			printf("\ndumpfr: unknown function number : R30=0x%04x\n", i);
 			exit(1);
 		}
@@ -8354,6 +8365,25 @@ int dumpfr(struct Work *w)
 				continue;
 			}
 		}
+		if (op == 0x0e) {
+			printf("_");
+			i = dumpfr_getReg(&hh4r, repP, 0);
+			if (pregTypeFlag[i] == 0)
+				flagD = 1;
+			pregTypeFlag[i] = 1;
+			if (flagD != 0)
+				dumpfr_skipHh4(&hh4r, 1);
+			dumpfr_skipHh4(&hh4r, 1);
+			j = i;
+			if (flag4 != 0) {
+				printf("_");
+				j = dumpfr_getReg(&hh4r, repP, 1);
+			}
+			dumpfr_updateRep(repP, i);
+			dumpfr_updateRep(repP, j);
+			flag4 = flagD = 0;
+			continue;
+		}
 		if (op == 0x0f) {
 			dumpfr_skipHh4(&hh4r, 4);
 			continue;
@@ -8380,6 +8410,12 @@ int dumpfr(struct Work *w)
 			dumpfr_skipHh4(&hh4r, j);
 			flag4 = flagD = 0;
 			continue;
+		}
+		if (op == 0x1e) {
+			if (flag4 == 0) {
+				dumpfr_skipHh4(&hh4r, 2);
+				continue;
+			}
 		}
 		if (0x20 <= op && op <= 0x27) {
 			if (flagD == 0) {

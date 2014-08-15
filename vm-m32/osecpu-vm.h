@@ -47,7 +47,7 @@ typedef struct _OsecpuVm {
 	const Defines *defines;
 	int errorCode;
 	unsigned char prefix2f[PREFIX2F_SIZE];
-	char *stack0, *stack1, *stackTop;
+	char *stack0, *stack1, *stackTop, *stack00;
 } OsecpuVm;
 
 // osecpu-vm.c
