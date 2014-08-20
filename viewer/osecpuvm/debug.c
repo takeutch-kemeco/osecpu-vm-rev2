@@ -66,7 +66,17 @@ void debugMonitor(OsecpuVm *vm)
 		if (i == EXEC_BAD_BITS)			p = "Bad bit";
 		if (i == EXEC_BITS_RANGE_OVER)	p = "Bit range over";
 		if (i == EXEC_SRC_OVERRUN)		p = "Code terminated";
+		if (i == EXEC_TYP_MISMATCH)		p = "Type mismatch";
+		if (i == EXEC_PTR_RANGE_OVER)	p = "Pointer range over";
+		if (i == EXEC_BAD_ACCESS)		p = "Bad access type (read, write, exec, seek...)";
+		if (i == EXEC_API_ERROR)		p = "Api error";
+		if (i == EXEC_STACK_ALLOC_ERROR)	p = "Stack alloc error";
+		if (i == EXEC_STACK_FREE_ERROR)	p = "Stack free error";
 		if (i == EXEC_EXIT)				p = "Exit";
+		if (i == EXEC_MALLOC_ERROR)	p = "Heap alloc error";
+		if (i == EXEC_MFREE_ERROR)	p = "Heap free error";
+		if (i == EXEC_EXECSTEP_OVER)	p = "Exec step over";
+		if (i == EXEC_ALLOCLIMIT_OVER)	p = "Alloc limit over";
 		printf("dbg: VM: %s. (ec=%03d)\n", p, i);
 	}
 	i = 0;
@@ -182,6 +192,10 @@ void debugMonitor(OsecpuVm *vm)
 		}
 		if (strcmp(cmdlin, "q\n") == 0 || strcmp(cmdlin, "quit\n") == 0)
 			exit(1);
+		if (strcmp(cmdlin, "info\n") == 0) {
+			printf("execSteps1=%d, execSteps0=%09d\n", vm->execSteps1, vm->execSteps0);
+			continue;
+		}
 
 		printf("debug command error.\n");
 	}

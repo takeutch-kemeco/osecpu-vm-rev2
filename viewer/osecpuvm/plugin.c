@@ -57,7 +57,7 @@ int execPlugIn(const unsigned char *path, void *apiFunc, void *env, int bsiz, in
 			continue;
 		}
 		if (byteBuf0[2] >= 0x10) {
-			fileSize = decode_fcode(byteBuf0 + 2, byteBuf0 + fileSize, byteBuf0 + 2, byteBuf0 + bsiz);
+			fileSize = decode_fcode(byteBuf0 + 2, byteBuf0 + fileSize, byteBuf0 + 2, byteBuf0 + bsiz, 0);
 			if (fileSize > 0) fileSize += 2;
 			continue;
 		}

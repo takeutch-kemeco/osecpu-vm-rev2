@@ -218,7 +218,7 @@ void execStepExtend(OsecpuVm *vm);
 // decode.c : フロントエンドコード関係.
 int decode_upx  (const unsigned char *p, const unsigned char *p1, unsigned char *q, unsigned char *q1);
 int decode_tek5 (const unsigned char *p, const unsigned char *p1, unsigned char *q, unsigned char *q1);
-int decode_fcode(const unsigned char *p, const unsigned char *p1, unsigned char *q, unsigned char *q1);
+int decode_fcode(const unsigned char *p, const unsigned char *p1, unsigned char *q, unsigned char *q1, char errExitFlag);
 
 // debug.c : デバッグモニター関係.
 char *debugJitcReport(OsecpuJitc *jitc, char *msg);

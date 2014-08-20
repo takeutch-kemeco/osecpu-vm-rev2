@@ -84,7 +84,7 @@ int OsecpuMain(int argc, const unsigned char **argv)
 			continue;
 		}
 		if (byteBuf0[2] >= 0x10) {
-			fileSize = decode_fcode(byteBuf0 + 2, byteBuf0 + fileSize, byteBuf0 + 2, byteBuf0 + BUFFER_SIZE);
+			fileSize = decode_fcode(byteBuf0 + 2, byteBuf0 + fileSize, byteBuf0 + 2, byteBuf0 + BUFFER_SIZE, 1);
 			if (fileSize > 0) fileSize += 2;
 			continue;
 		}
