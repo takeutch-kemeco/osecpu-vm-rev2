@@ -543,11 +543,12 @@ void api0002_drawPoint(OsecpuVm *vm)
 }
 
 void api0003_drawLine(OsecpuVm *vm)
+/// 2014.08.13 ???さんの提案によりブレゼンハムのアルゴリズムに変更.
 {
 	int c = apiLoadColor(vm, 0x32), modeC = execStep_getRxx(vm, 0x31, 4) & 0x0c;
 	int x0 = execStep_getRxx(vm, 0x33, 16), y0 = execStep_getRxx(vm, 0x34, 16);
 	int x1 = execStep_getRxx(vm, 0x35, 16), y1 = execStep_getRxx(vm, 0x36, 16);
-	int dx, dy, x, y, len, i;
+	int x, y, dx, dy, sx, sy, err, e2;
 	if (1) { // クリッピングOFFの場合.
 		if (x0 == -1) x0 = v_xsiz - 1;
 		if (y0 == -1) y0 = v_ysiz - 1;
@@ -558,34 +559,26 @@ void api0003_drawLine(OsecpuVm *vm)
 	}
 	dx = x1 - x0;
 	dy = y1 - y0;
-	x = x0 << 10;
-	y = y0 << 10;
-	if (dx < 0) dx = - dx;
-	if (dy < 0) dy = - dy;
-	if (dx >= dy) {
-		len = dx + 1; dx = 1024;
-		if (x0 > x1) dx *= -1;
-		if (y0 > y1) dy *= -1;
-		dy = (dy << 10) / len;
-	} else {
-		len = dy + 1; dy = 1024;
-		if (y0 > y1) dy *= -1;
-		if (x0 > x1) dx *= -1;
-		dx = (dx << 10) / len;
-	}
-	if (modeC == 0) {
-		for (i = 0; i < len; i++) {
-			vram[(x >> 10) + (y >> 10) * v_xsiz] =  c;
-			x += dx;
-			y += dy;
+	sx = sy = 1;
+	if (dx < 0) { dx *= -1; sx = -1; }
+	if (dy < 0) { dy *= -1; sy = -1; }
+	err = dx - dy;
+	x = x0;
+	y = y0;
+	for (;;) {
+		if (modeC == 0x00) vram[x + y * v_xsiz]  = c;
+		if (modeC == 0x04) vram[x + y * v_xsiz] |= c;
+		if (modeC == 0x08) vram[x + y * v_xsiz] ^= c;
+		if (modeC == 0x0c) vram[x + y * v_xsiz] &= c;
+		if (x == x1 && y == y1) break;
+		e2 = err * 2;
+		if (e2 > - dy) {
+			err -= dy;
+			x += sx;
 		}
-	} else {
-		for (i = 0; i < len; i++) {
-			if (modeC == 0x04) vram[(x >> 10) + (y >> 10) * v_xsiz] |= c;
-			if (modeC == 0x08) vram[(x >> 10) + (y >> 10) * v_xsiz] ^= c;
-			if (modeC == 0x0c) vram[(x >> 10) + (y >> 10) * v_xsiz] &= c;
-			x += dx;
-			y += dy;
+		if (e2 <   dx) {
+			err += dx;
+			y += sy;
 		}
 	}
 	return;
