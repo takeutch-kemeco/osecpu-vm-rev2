@@ -250,6 +250,7 @@ void jitcStep_checkPxx(int *pRC, int pxx)
 
 void execStep_checkMemAccess(OsecpuVm *vm, int p, int typ, int flag)
 {
+	PtrCtrl *pctrl;
 	if (vm->p[p].typ != typ)
 		jitcSetRetCode(&vm->errorCode, EXEC_TYP_MISMATCH);
 	if (vm->p[p].p < vm->p[p].p0 || vm->p[p].p1 <= vm->p[p].p) {
@@ -264,8 +265,9 @@ void execStep_checkMemAccess(OsecpuVm *vm, int p, int typ, int flag)
 		jitcSetRetCode(&vm->errorCode, EXEC_BAD_ACCESS);
 	if (flag == EXEC_CMA_FLAG_WRITE && (vm->p[p].flags & EXEC_CMA_FLAG_WRITE) == 0)
 		jitcSetRetCode(&vm->errorCode, EXEC_BAD_ACCESS);
-
-	// ToDo: liveSign‚É‘Î‰ž‚·‚é.
+	pctrl = vm->p[p].ptrCtrl;
+	if (pctrl != NULL && flag != EXEC_CMA_FLAG_SEEK && pctrl->liveSign != vm->p[p].liveSign)
+		jitcSetRetCode(&vm->errorCode, EXEC_DEAD_PTR);
 	return;
 }
 
@@ -274,6 +276,7 @@ void execStep_plimm(OsecpuVm *vm, int p, int i)
 	int typ, len, typSign, typSize0, typSize1;
 	typ = vm->defines->label[i].typ;
 	vm->p[p].typ = typ;
+	vm->p[p].ptrCtrl = NULL;
 	if (typ >= 2) {
 		vm->p[p].p = (unsigned char *) (vm->defines->label[i].dst + 3);
 		vm->p[p].p0 = vm->p[p].p;

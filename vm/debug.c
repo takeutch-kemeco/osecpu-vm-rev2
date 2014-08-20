@@ -63,20 +63,22 @@ void debugMonitor(OsecpuVm *vm)
 	i = vm->errorCode;
 	if (i > 0) {
 		p = "Internal error";
-		if (i == EXEC_BAD_BITS)			p = "Bad bit";
-		if (i == EXEC_BITS_RANGE_OVER)	p = "Bit range over";
-		if (i == EXEC_SRC_OVERRUN)		p = "Code terminated";
-		if (i == EXEC_TYP_MISMATCH)		p = "Type mismatch";
-		if (i == EXEC_PTR_RANGE_OVER)	p = "Pointer range over";
-		if (i == EXEC_BAD_ACCESS)		p = "Bad access type (read, write, exec, seek...)";
-		if (i == EXEC_API_ERROR)		p = "Api error";
+		if (i == EXEC_BAD_BITS)				p = "Bad bit";
+		if (i == EXEC_BITS_RANGE_OVER)		p = "Bit range over";
+		if (i == EXEC_SRC_OVERRUN)			p = "Code terminated";
+		if (i == EXEC_TYP_MISMATCH)			p = "Type mismatch";
+		if (i == EXEC_PTR_RANGE_OVER)		p = "Pointer range over";
+		if (i == EXEC_BAD_ACCESS)			p = "Bad access type (read, write, exec, seek...)";
+		if (i == EXEC_API_ERROR)			p = "Api error";
 		if (i == EXEC_STACK_ALLOC_ERROR)	p = "Stack alloc error";
-		if (i == EXEC_STACK_FREE_ERROR)	p = "Stack free error";
-		if (i == EXEC_EXIT)				p = "Exit";
-		if (i == EXEC_MALLOC_ERROR)		p = "Heap alloc error";
-		if (i == EXEC_MFREE_ERROR)		p = "Heap free error";
-		if (i == EXEC_EXECSTEP_OVER)	p = "Exec step over";
-		if (i == EXEC_ALLOCLIMIT_OVER)	p = "Alloc limit over";
+		if (i == EXEC_STACK_FREE_ERROR)		p = "Stack free error";
+		if (i == EXEC_EXIT)					p = "Exit";
+		if (i == EXEC_MALLOC_ERROR)			p = "Heap alloc error";
+		if (i == EXEC_MFREE_ERROR)			p = "Heap free error";
+		if (i == EXEC_EXECSTEP_OVER)		p = "Exec step over";
+		if (i == EXEC_ALLOCLIMIT_OVER)		p = "Alloc limit over";
+		if (i == EXEC_ALLOC_PTRCTRL_ERR)	p = "PtrCtrl alloc error";
+		if (i == EXEC_DEAD_PTR)				p = "Dead pointer";
 		printf("dbg: VM: %s. (ec=%03d)\n", p, i);
 	}
 	i = 0;
@@ -95,7 +97,7 @@ void debugMonitor(OsecpuVm *vm)
 	if (i == 0xfd) p = "LIDR";
 	if (i == 0xfe) p = "REM";
 	j = vm->debugBreakPointValue;
-	printf("dbg: DR0=%06d, next-op=0x%02x(%-6s), bp.i=0x%02x, bp.v=0x%08x=%010d", vm->dr[0], i, p, vm->debugBreakPointIndex, j, j);
+	printf("dbg: DR0=%04d, next-op=0x%02x(%-6s), bp.i=0x%02x, bp.v=0x%08x=%09d", vm->dr[0], i, p, vm->debugBreakPointIndex, j, j);
 	for (i = 0; i < vm->debugWatchs; i++) {
 		j = vm->debugWatchIndex[i];
 		printf(", R%02X=0x%08x=%010d(bit=%02d)", j, vm->r[j], vm->r[j], vm->bit[j]);
@@ -194,6 +196,15 @@ void debugMonitor(OsecpuVm *vm)
 			exit(1);
 		if (strcmp(cmdlin, "info\n") == 0) {
 			printf("execSteps1=%d, execSteps0=%09d\n", vm->execSteps1, vm->execSteps0);
+			printf("mallocTotal0:%9d, mallocTotal1:%9d\n", vm->mallocTotal0, vm->mallocTotal1);
+			printf("tallocTotal0:%9d, tallocTotal1:%9d\n", vm->tallocTotal0, vm->tallocTotal1);
+			for (i = 0; i < vm->ptrCtrlSize; i++) {
+				if (vm->ptrCtrl[i].size >= 0) {
+					printf("  sign:0x%08x, size:%09d, typ:0x%04x, flags:0x%04x, DR0:%04d, DR1:%04d\n",
+						vm->ptrCtrl[i].liveSign, vm->ptrCtrl[i].size, vm->ptrCtrl[i].typ,
+						vm->ptrCtrl[i].flags, vm->ptrCtrl[i].dr[0], vm->ptrCtrl[i].dr[1]);
+				}
+			}
 			continue;
 		}
 

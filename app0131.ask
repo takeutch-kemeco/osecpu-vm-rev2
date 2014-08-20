@@ -1,6 +1,18 @@
 #include "osecpu_ask.h"
 
+#if 0
+	api_malloc(P01, T_SINT32, 100);
+	SMEM0(32, R00, T_SINT32, P01);
+//	debugBreakPoint();
+	api_mfree(P01, T_SINT32, 100);
+//	SMEM0(32, R01, T_SINT32, P01);
+	debugBreakPoint();
+//	api_mfree(P01, T_SINT32, 100);
+#endif
+
 	api_malloc(P01, T_SINT32, 100);
 	api_mfree(P01, T_SINT32, 100);
-//	debugBreakPoint();
+	debugBreakPoint();
+	api_malloc(P02, T_SINT32, 100);
+	SMEM0(32, R00, T_SINT32, P01);
 

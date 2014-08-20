@@ -147,6 +147,7 @@ void execStepOther(OsecpuVm *vm)
 	const Int32 *ip = vm->ip;
 	Int32 opecode = ip[0], imm;
 	int bit0, bit1, r, p, f, typ, typSign, typSize0, typSize1, i;
+	PtrCtrl *pctrl;
 	if (opecode == 0x00) { // NOP();
 		ip++;
 		goto fin;
@@ -246,14 +247,56 @@ void execStepOther(OsecpuVm *vm)
 			jitcSetRetCode(&vm->errorCode, EXEC_ALLOCLIMIT_OVER);
 		if (vm->mallocTotal1 > vm->mallocTotal1Limit)
 			jitcSetRetCode(&vm->errorCode, EXEC_ALLOCLIMIT_OVER);
+		pctrl = osecpuVmAllocPtrCtrl(vm);
+		pctrl->size = i;
+		pctrl->typ = typ;
+		pctrl->flags = 1; // heap
+		pctrl->p0 = vm->p[p].p0;
+		pctrl->b0 = vm->p[p].bit;
+		pctrl->dr[0] = vm->dr[0];
+		pctrl->dr[1] = vm->dr[1];
+		vm->p[p].ptrCtrl = pctrl;
+		vm->p[p].liveSign = pctrl->liveSign;
 		if (vm->errorCode == 0)
 			ip += 6;
 		goto fin;
 	}
 	if (opecode == 0x33) {
 		p = ip[1]; typ = ip[2]; bit0 = ip[3]; r = ip[4]; bit1 = ip[5];
-		// éËî≤Ç´Ç…ÇÊÇËÅAÇ»ÇÒÇ∆âΩÇ‡ÇµÇ»Ç¢ÅI.
-		// å„ì˙ÅAÇøÇ·ÇÒÇ∆freeÇ≥ÇπÇ‹Ç∑.
+		typ = execStep_getRxx(vm, typ, bit0);
+		i = execStep_getRxx(vm, r, bit1);
+		getTypSize(typ, &typSize0, &typSize1, &typSign);
+		if (i < 0 || typSize0 < 0 || i > 256 * 1024 * 1024)
+			jitcSetRetCode(&vm->errorCode, EXEC_MFREE_ERROR);
+		if (vm->p[p].p == NULL) {
+			jitcSetRetCode(&vm->errorCode, EXEC_MFREE_ERROR);
+			goto fin;
+		}
+		if (vm->p[p].p != vm->p[p].p0 || vm->p[p].typ != typ) {
+			jitcSetRetCode(&vm->errorCode, EXEC_MFREE_ERROR);
+			goto fin;
+		}
+		pctrl = vm->p[p].ptrCtrl;
+		if (pctrl == NULL) {
+			jitcSetRetCode(&vm->errorCode, EXEC_MFREE_ERROR);
+			goto fin;
+		}
+		if (pctrl->liveSign != vm->p[p].liveSign) {
+			jitcSetRetCode(&vm->errorCode, EXEC_DEAD_PTR);
+			goto fin;
+		}
+		if (pctrl->size != i) {
+			jitcSetRetCode(&vm->errorCode, EXEC_MFREE_ERROR);
+			goto fin;
+		}
+		vm->mallocTotal0 -= typSize0 * i / 8 + 32;
+		pctrl->liveSign ^= -1;
+		if ((pctrl->flags & 2) == 0) {
+			if (pctrl->p0 != NULL) free(pctrl->p0);
+			if (pctrl->b0 != NULL) free(pctrl->b0);
+			pctrl->size = -1;
+			vm->mallocTotal1 -= (typSize1 + 1) * i + 64;
+		}
 		ip += 6;
 		goto fin;
 	}
@@ -468,8 +511,35 @@ fin:
 
 int osecpuVmPtrCtrlInit(OsecpuVm *vm, int size)
 {
+	int i;
 	vm->ptrCtrl = malloc(size * sizeof (PtrCtrl));
 	vm->ptrCtrlSize = size;
+	for (i = 0; i < size; i++) {
+		vm->ptrCtrl[i].size = -1;
+		vm->ptrCtrl[i].typ  = PTR_TYP_NULL;
+		vm->ptrCtrl[i].flags = 0;
+	}
 	return 0;
+}
+
+int osecpuVmMakeLiveSign(OsecpuVm *vm)
+{
+	static int i = 0;
+	i++;
+	return i;
+}
+
+PtrCtrl *osecpuVmAllocPtrCtrl(OsecpuVm *vm)
+{
+	int i;
+	for (i = 0; i < vm->ptrCtrlSize; i++) {
+		if (vm->ptrCtrl[i].size < 0) break;
+	}
+	if (i >= vm->ptrCtrlSize - 1) {
+		i = vm->ptrCtrlSize - 1;
+		jitcSetRetCode(&vm->errorCode, EXEC_ALLOC_PTRCTRL_ERR);
+	}
+	vm->ptrCtrl[i].liveSign = osecpuVmMakeLiveSign(vm);
+	return &vm->ptrCtrl[i];
 }
 

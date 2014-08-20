@@ -251,29 +251,31 @@ int execStep(OsecpuVm *vm)
 {
 	const Int32 *ip = vm->ip;
 	vm->errorCode = 0;
-	vm->execSteps0++;
-	if (vm->execSteps0 >= 0x7fffffff || vm->execSteps0 < 0)
-		vm->execSteps0 = 0x7fffffff;
-	if (vm->execSteps0 >= 1 << 30) {
-		vm->execSteps1 += vm->execSteps0 >> 30;
-		vm->execSteps0 &= (1 << 30) - 1;
-		if (vm->execSteps1 >= 0x7fffffff || vm->execSteps1 < 0)
-			vm->execSteps1 = 0x7fffffff;
-	}
-	if (vm->execSteps0Limit >= 0 && vm->execSteps0 > vm->execSteps0Limit) {
- 		vm->errorCode = EXEC_EXECSTEP_OVER;
-		goto fin;
-	}
-	if (vm->execSteps1Limit >= 0 && vm->execSteps1 > vm->execSteps1Limit) {
- 		vm->errorCode = EXEC_EXECSTEP_OVER;
-		goto fin;
-	}
-	if (vm->disableDebug == 0)
-		execStepDebug(vm);
 	if (ip >= vm->ip1) {
  		vm->errorCode = EXEC_SRC_OVERRUN;
 		goto fin;
 	}
+	if (*ip != 0xfd && *ip != 0x01ff) {
+		vm->execSteps0++;
+		if (vm->execSteps0 >= 0x7fffffff || vm->execSteps0 < 0)
+			vm->execSteps0 = 0x7fffffff;
+		if (vm->execSteps0 >= 1 << 30) {
+			vm->execSteps1 += vm->execSteps0 >> 30;
+			vm->execSteps0 &= (1 << 30) - 1;
+			if (vm->execSteps1 >= 0x7fffffff || vm->execSteps1 < 0)
+				vm->execSteps1 = 0x7fffffff;
+		}
+		if (vm->execSteps0Limit >= 0 && vm->execSteps0 > vm->execSteps0Limit) {
+ 			vm->errorCode = EXEC_EXECSTEP_OVER;
+			goto fin;
+		}
+		if (vm->execSteps1Limit >= 0 && vm->execSteps1 > vm->execSteps1Limit) {
+ 			vm->errorCode = EXEC_EXECSTEP_OVER;
+			goto fin;
+		}
+	}
+	if (vm->disableDebug == 0)
+		execStepDebug(vm);
 	execStepInteger(vm);	if (ip != vm->ip || vm->errorCode != 0) goto fin;
 	execStepOther(vm);		if (ip != vm->ip || vm->errorCode != 0) goto fin;
 	execStepPointer(vm);	if (ip != vm->ip || vm->errorCode != 0) goto fin;

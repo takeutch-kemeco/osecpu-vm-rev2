@@ -13,7 +13,7 @@ int execPlugIn(const unsigned char *path, void *apiFunc, void *env, int bsiz, in
 	OsecpuVm vm;
 	unsigned char *byteBuf0 = malloc(bsiz);
 	Int32 *j32buf = malloc(bsiz * sizeof (Int32));
-	int fileSize, rc = 0;
+	int fileSize, rc = 0, i;
 	int stackSize = 1; /* メガバイト単位 */
 	FILE *fp;
 	jitc.defines = &defs;
@@ -85,6 +85,13 @@ int execPlugIn(const unsigned char *path, void *apiFunc, void *env, int bsiz, in
 	else
 		rc = OSECPUVM_END;
 fin:
+	for (i = 0; i < vm.ptrCtrlSize; i++) {
+		if (vm.ptrCtrl[i].size >= 0) {
+			if (vm.ptrCtrl[i].p0 != NULL) free(vm.ptrCtrl[i].p0);
+			if (vm.ptrCtrl[i].b0 != NULL) free(vm.ptrCtrl[i].b0);
+			vm.ptrCtrl[i].size = -1;
+		}
+	}
 	free(byteBuf0);
 	free(j32buf);
 	free(vm.stack00);
