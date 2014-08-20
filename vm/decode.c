@@ -8,7 +8,7 @@ typedef unsigned char UCHAR;
 // upxŠÖŒW.
 
 typedef struct _DecodeUpxStr {
-	const UCHAR *p;
+	const UCHAR *p, *p1;
 	int bitBuf, bitBufLen;
 	int tmp;
 } DecodeUpxStr;
@@ -16,8 +16,13 @@ typedef struct _DecodeUpxStr {
 int decode_upx_getBit(DecodeUpxStr *s)
 {
 	if (s->bitBufLen == 0) {
-		s->bitBuf = s->p[0] | s->p[1] << 8;
-		s->p += 2;
+		if (s->p + 2 <= s->p1) {
+			s->bitBuf = s->p[0] | s->p[1] << 8;
+			s->p += 2;
+		} else {
+			s->p = s->p1 + 1;
+			s->bitBuf |= -1;
+		}
 		s->bitBufLen |= 16;
 	}
 	s->bitBufLen--;
@@ -41,11 +46,13 @@ int decode_upx(const UCHAR *p, const UCHAR *p1, UCHAR *q, UCHAR *q1)
 	hh4ReaderInit(&hh4r, pp0, 0, q1 - 8, 0);
 	i = hh4ReaderGetUnsigned(&hh4r);
 	s.p = (UCHAR *) hh4r.p.p;
+	s.p1 = q1 - 8;
 	dis |= -1;
 	s.bitBufLen &= 0;
 	goto l1;
 l0:
 	if (s.p <= q) goto err;
+	if (s.p >= s.p1) goto err;
 	*q++ = *s.p++;
 l1:
 	i = decode_upx_getBit(&s);
@@ -70,6 +77,7 @@ l1:
 	s.tmp++;
 	if (dis < -0xd00) s.tmp++;
 	if (s.p <= q + s.tmp) goto err;
+	if (q + i + dis < q0) goto err;
 	for (i = 0; i < s.tmp; i++)
 		q[i] = q[i + dis];
 	q += s.tmp;
@@ -196,6 +204,7 @@ void fcode_api0006(DecodeFcodeStr *s);
 void fcode_api0009(DecodeFcodeStr *s);
 void fcode_api000d(DecodeFcodeStr *s);
 void fcode_api0010(DecodeFcodeStr *s);
+void fcode_api0013(DecodeFcodeStr *s);
 void fcode_api07c0(DecodeFcodeStr *s);
 int fcode_initLabel(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1);
 int fcode_fixLabel(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1);
@@ -345,6 +354,7 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 			if (i == 0x0009) { fcode_api0009(s); goto fin; }
 			if (i == 0x000d) { fcode_api000d(s); goto fin; }
 			if (i == 0x0010) { fcode_api0010(s); goto fin; }
+			if (i == 0x0013) { fcode_api0013(s); goto fin; }
 			if (i == 0x07c0) { fcode_api07c0(s); goto fin; }
 		}
 		if (opecode == 0x6) {
@@ -497,6 +507,7 @@ void decode_fcodeStep(DecodeFcodeStr *s)
 			s->pxxTyp[k] = i;
 			fcode_updateRep(s, 1, k);
 			fcode_unknownBitR(s, 0x3a, 0x3b);
+			s->flagD = 0;
 			goto fin;
 		}
 		if (opecode == 0x34) {
@@ -2468,6 +2479,21 @@ void fcode_api0010(DecodeFcodeStr *s)
 	return;
 }
 
+void fcode_api0013(DecodeFcodeStr *s)
+// api_rand0(range).
+{
+	int r;
+	fcode_putRemark1(s);
+	fcode_putLimm(s, 16, 0x30, 0x0013);
+	fcode_putLimmOrCp(s, 32, 0x31); // range.
+	fcode_putPcallP2f(s);
+	r = fcode_getReg(s, 0, MODE_REG_LC3);
+	fcode_putCp(s, 32, r, 0x30);
+	fcode_updateRep(s, 0, r);
+	s->bitR[0x30] = 32;
+	return;
+}
+
 void fcode_api07c0(DecodeFcodeStr *s)
 // junkApi_fileRead(arg).
 {
@@ -2724,6 +2750,10 @@ int fcode_fixTyp(DecodeFcodeStr *s, unsigned char *q0, unsigned char *q1)
 		}
 		if (*q == 0x88) {	// LMEM
 			i = fcode_fixTypSub(pTyp, q[1], &q[2]);
+			if (i == PTR_TYP_INVALID) goto err;
+		}
+		if (*q == 0x89) {	// SMEM
+			i = fcode_fixTypSub(pTyp, q[8], &q[9]);
 			if (i == PTR_TYP_INVALID) goto err;
 		}
 		if (*q == 0x8e) {	// PADD

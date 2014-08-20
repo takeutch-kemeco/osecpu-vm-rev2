@@ -176,7 +176,14 @@ void execStepOther(OsecpuVm *vm)
 			jitcSetRetCode(&vm->errorCode, EXEC_STACK_ALLOC_ERROR);
 		for (r = 0; r < i; r++)
 			vm->p[p].bit[r] = 0;
-		ip += 6;
+		vm->tallocTotal0 += typSize0 * i / 8 + 32;
+		vm->tallocTotal1 += (typSize1 + 1) * i + 64;
+		if (vm->tallocTotal0 > vm->tallocTotal0Limit)
+			jitcSetRetCode(&vm->errorCode, EXEC_ALLOCLIMIT_OVER);
+		if (vm->tallocTotal1 > vm->tallocTotal1Limit)
+			jitcSetRetCode(&vm->errorCode, EXEC_ALLOCLIMIT_OVER);
+		if (vm->errorCode == 0)
+			ip += 6;
 		goto fin;
 	}
 	if (opecode == 0x31) {
@@ -209,6 +216,8 @@ void execStepOther(OsecpuVm *vm)
 			if (r != 0)
 				jitcSetRetCode(&vm->errorCode, EXEC_STACK_FREE_ERROR);
 		}
+		vm->tallocTotal0 -= typSize0 * i / 8 + 32;
+		vm->tallocTotal1 -= (typSize1 + 1) * i + 64;
 		ip += 6;
 		goto fin;
 	}
@@ -231,13 +240,21 @@ void execStepOther(OsecpuVm *vm)
 			jitcSetRetCode(&vm->errorCode, EXEC_MALLOC_ERROR);
 		for (r = 0; r < i; r++)
 			vm->p[p].bit[r] = 0;
-		ip += 6;
+		vm->mallocTotal0 += typSize0 * i / 8 + 32;
+		vm->mallocTotal1 += (typSize1 + 1) * i + 64;
+		if (vm->mallocTotal0 > vm->mallocTotal0Limit)
+			jitcSetRetCode(&vm->errorCode, EXEC_ALLOCLIMIT_OVER);
+		if (vm->mallocTotal1 > vm->mallocTotal1Limit)
+			jitcSetRetCode(&vm->errorCode, EXEC_ALLOCLIMIT_OVER);
+		if (vm->errorCode == 0)
+			ip += 6;
 		goto fin;
 	}
 	if (opecode == 0x33) {
 		p = ip[1]; typ = ip[2]; bit0 = ip[3]; r = ip[4]; bit1 = ip[5];
 		// éËî≤Ç´Ç…ÇÊÇËÅAÇ»ÇÒÇ∆âΩÇ‡ÇµÇ»Ç¢ÅI.
 		// å„ì˙ÅAÇøÇ·ÇÒÇ∆freeÇ≥ÇπÇ‹Ç∑.
+		ip += 6;
 		goto fin;
 	}
 	if (opecode == 0x3c) {

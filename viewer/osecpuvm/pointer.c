@@ -213,8 +213,7 @@ void execStepPointer(OsecpuVm *vm)
 				execStep_checkMemAccess(vm, p1, PTR_TYP_CODE, EXEC_CMA_FLAG_EXEC); // 主にliveSignのチェック.
 				if (vm->errorCode != 0) goto fin;
 				ip = (const Int32 *) vm->p[p1].p;
-			}
-			if (vm->p[p1].typ == PTR_TYP_NATIVECODE) {	// native-code (API)
+			} else if (vm->p[p1].typ == PTR_TYP_NATIVECODE) {	// native-code (API)
 				const Int32 *(*func)(OsecpuVm *);
 				const Int32 *nextIp;
 				func = (void *) vm->p[p1].p;
@@ -223,7 +222,8 @@ void execStepPointer(OsecpuVm *vm)
 					ip = nextIp;
 				else
 					jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
-			}
+			} else
+				jitcSetRetCode(&vm->errorCode, EXEC_TYP_MISMATCH);
 		} else {
 			vm->p[p0] = vm->p[p1];
 			ip += 3;

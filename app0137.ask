@@ -1,0 +1,7 @@
+#include "osecpu_ask.h"
+
+	Int32s i:R00, j:R01;
+	for (i = 0; i != 10; i++) {
+		api_rand(j, 9999);
+		api_putStringDec('\1\n', j, 4, 0);
+	}

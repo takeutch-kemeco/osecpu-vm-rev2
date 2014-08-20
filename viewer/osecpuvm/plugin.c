@@ -1,8 +1,8 @@
 #include "osecpu-vm.h"
 
-void apiInit(OsecpuVm *vm, void *apiFunc);
+void apiInit(OsecpuVm *vm, void *apiFunc, int limit[2+4]);
 
-int execPlugIn(const unsigned char *path, void *apiFunc, void *env, int bsiz, int flags)
+int execPlugIn(const unsigned char *path, void *apiFunc, void *env, int bsiz, int flags, int limit[2+4])
 // path: プラグインのパス.
 // apiFunc: P2Fの処理関数.
 // env: 追加環境情報.
@@ -78,7 +78,7 @@ int execPlugIn(const unsigned char *path, void *apiFunc, void *env, int bsiz, in
 	vm.ip  = j32buf;
 	vm.ip1 = jitc.dst;
 
-	apiInit(&vm, apiFunc);
+	apiInit(&vm, apiFunc, limit);
 	rc = execAll(&vm);
 	if (rc != EXEC_SRC_OVERRUN && rc != EXEC_EXIT)
 		rc = OSECPUVM_DOWN;
@@ -92,7 +92,7 @@ fin:
 	return rc;
 }
 
-void apiInit(OsecpuVm *vm, void *apiFunc)
+void apiInit(OsecpuVm *vm, void *apiFunc, int limit[2+4])
 {
 	int i, j;
 	for (i = 0; i <= 0x3f; i++) {
@@ -112,6 +112,13 @@ void apiInit(OsecpuVm *vm, void *apiFunc)
 	vm->debugWatchIndex[0] = 0;
 	vm->debugWatchIndex[1] = 1;
 	vm->debugWatchs = 0;
+	vm->execSteps0 = vm->execSteps1 = 0;
+	vm->execSteps0Limit = limit[0];
+	vm->execSteps1Limit = limit[1];
+	vm->tallocTotal0 = 0; vm->tallocTotal0Limit = limit[2];
+	vm->tallocTotal1 = 0; vm->tallocTotal1Limit = limit[3];
+	vm->mallocTotal0 = 0; vm->mallocTotal0Limit = limit[4];
+	vm->mallocTotal1 = 0; vm->mallocTotal1Limit = limit[5];
 	return;
 }
 

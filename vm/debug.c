@@ -66,6 +66,8 @@ void debugMonitor(OsecpuVm *vm)
 		if (i == EXEC_BAD_BITS)			p = "Bad bit";
 		if (i == EXEC_BITS_RANGE_OVER)	p = "Bit range over";
 		if (i == EXEC_SRC_OVERRUN)		p = "Code terminated";
+		if (i == EXEC_TYP_MISMATCH)		p = "Type mismatch";
+		if (i == EXEC_API_ERROR)		p = "Api error"; 
 		if (i == EXEC_EXIT)				p = "Exit";
 		printf("dbg: VM: %s. (ec=%03d)\n", p, i);
 	}
@@ -182,6 +184,10 @@ void debugMonitor(OsecpuVm *vm)
 		}
 		if (strcmp(cmdlin, "q\n") == 0 || strcmp(cmdlin, "quit\n") == 0)
 			exit(1);
+		if (strcmp(cmdlin, "info\n") == 0) {
+			printf("execSteps1=%d, execSteps0=%09d\n", vm->execSteps1, vm->execSteps0);
+			continue;
+		}
 
 		printf("debug command error.\n");
 	}

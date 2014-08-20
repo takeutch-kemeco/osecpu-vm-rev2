@@ -5400,10 +5400,10 @@ appack0_bc:
 					appackSub1s(&aw, 0x0004, 0);
 					if (simple == 0) {
 						if ((aw.prm_r[0x31] & 3) == 0 && aw.prm_r[0x32] == 7) aw.prm_r[0x32] = -1;
-						if (aw.prm_r[0x33] == aw.v_xsiz) aw.prm_r[0x33] = -1;
-						if (aw.prm_r[0x34] == aw.v_ysiz) aw.prm_r[0x34] = -1;
 						if (aw.prm_r[0x34] == aw.prm_r[0x33] && aw.prm_r[0x34] > 0)
 							aw.prm_r[0x34] = 0;
+						if (aw.prm_r[0x33] == aw.v_xsiz) aw.prm_r[0x33] = -1;
+						if (aw.prm_r[0x34] == aw.v_ysiz) aw.prm_r[0x34] = -1;
 					}
 					for (i = 0x31; i <= 0x36; i++)
 						appackSub1i(&aw, aw.prm_r[i], len3table0);
@@ -5425,10 +5425,10 @@ appack0_bc:
 					appackSub1s(&aw, 0x0005, 0);
 					if (simple == 0) {
 						if ((aw.prm_r[0x31] & 3) == 0 && aw.prm_r[0x32] == 7) aw.prm_r[0x32] = -1;
-						if (aw.prm_r[0x33] == aw.v_xsiz) aw.prm_r[0x33] = -1;
-						if (aw.prm_r[0x34] == aw.v_ysiz) aw.prm_r[0x34] = -1;
 						if (aw.prm_r[0x34] == aw.prm_r[0x33] && aw.prm_r[0x34] > 0)
 							aw.prm_r[0x34] = 0;
+						if (aw.prm_r[0x33] == aw.v_xsiz) aw.prm_r[0x33] = -1;
+						if (aw.prm_r[0x34] == aw.v_ysiz) aw.prm_r[0x34] = -1;
 					}
 					for (i = 0x31; i <= 0x36; i++)
 						appackSub1i(&aw, aw.prm_r[i], len3table0);
@@ -5531,6 +5531,30 @@ appack0_bc:
 					p = pp;
 					aw.lastLabel++;
 					continue;
+				}
+				if (aw.prm_r[0x30] == 0x0013) { // api_rand
+					j = 0;
+					if (cmpBytes(pp, "fcfd_f788#4_80") != 0) {
+						j = pp[4] << 24 | pp[5] << 16 | pp[6] << 8 | pp[7];
+						aw.dr[0] = j;
+						pp += 9;
+					}
+					if (cmpBytes(pp, "90_b0_b0_Yx_f788") != 0) {
+						i = pp[3] & 0x3f;
+						appackSub1op(&aw, 0x05);
+						appackSub1s(&aw, 0x0013, 0);
+						appackSub1i(&aw, aw.prm_r[0x31], len3table0);
+						appackSub1r(&aw, i, MODE_REG_LC3);
+						appack_updateRep(&aw, 0, i);
+						p = pp + 10;
+						aw.lastLabel++;
+						if (j != 0 && encLidr != 0) {
+							appackSub1op(&aw, 0xfd);
+							appackSub1s(&aw, j, 0);
+							appackSub1u(&aw, 0);
+						}
+						continue;
+					}
 				}
 				if (aw.prm_r[0x30] == 0x07c0) {	// junkApi_fileRead
 					j = 0;

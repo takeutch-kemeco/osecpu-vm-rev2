@@ -1,4 +1,0 @@
-#include "osecpu_ask.h"
-
-	api_end();
-

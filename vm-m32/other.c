@@ -159,6 +159,7 @@ void execStepOther(OsecpuVm *vm)
 		p = ip[1]; typ = ip[2]; bit0 = ip[3]; r = ip[4]; bit1 = ip[5];
 		// è”²‚«‚É‚æ‚èA‚È‚ñ‚Æ‰½‚à‚µ‚È‚¢I.
 		// Œã“úA‚¿‚á‚ñ‚Æfree‚³‚¹‚Ü‚·.
+		ip += 6;
 		goto fin;
 	}
 	if (opecode == 0x3c) {

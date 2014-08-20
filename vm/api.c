@@ -1,5 +1,6 @@
 #include "osecpu-vm.h"
 #include <setjmp.h>
+#include <time.h>
 
 // OsecpuMain()‚Í‚±‚Ìapi.c‚É‚ ‚è‚Ü‚·I
 
@@ -10,6 +11,7 @@ typedef struct _ApiWork {
 	unsigned char lastConsoleChar;
 	int argc;
 	const unsigned char **argv;
+	unsigned int xorShift[4];
 } ApiWork;
 
 static ApiWork apiWork;
@@ -17,6 +19,8 @@ static ApiWork apiWork;
 const Int32 *apiEntry(OsecpuVm *vm);
 void apiInit(OsecpuVm *vm, int argc, const unsigned char **argv);
 void apiEnd(OsecpuVm *vm, Int32 retcode);
+void apiXorShiftSetSeed(unsigned int s);
+unsigned int apiXorShift();
 
 #define BUFFER_SIZE		1024 * 1024	// 1M
 #define KEYBUFSIZ		4096
@@ -171,6 +175,13 @@ void apiInit(OsecpuVm *vm, int argc, const unsigned char **argv)
 	keybuf_r = keybuf_w = keybuf_c = 0;
 	keybuf = malloc(KEYBUFSIZ * sizeof (int));
 	toDebugMonitor = &(vm->toDebugMonitor);
+	apiXorShiftSetSeed(time(NULL));
+	vm->execSteps0 = vm->execSteps1 = 0;
+	vm->execSteps0Limit = vm->execSteps1Limit = -1;
+	vm->mallocTotal0 = 0; vm->mallocTotal0Limit = 0x7fffffff;
+	vm->mallocTotal1 = 0; vm->mallocTotal1Limit = 0x7fffffff;
+	vm->tallocTotal0 = 0; vm->tallocTotal0Limit = 0x7fffffff;
+	vm->tallocTotal1 = 0; vm->tallocTotal1Limit = 0x7fffffff;
 	return;
 }
 
@@ -184,6 +195,7 @@ void api0008_exit(OsecpuVm *vm);
 void api0009_sleep(OsecpuVm *vm);
 void api000d_inkey(OsecpuVm *vm);
 void api0010_openWin(OsecpuVm *vm);
+void api0013_rand(OsecpuVm *vm);
 
 void api07c0_fileRead(OsecpuVm *vm);
 void api07c1_fileWrite(OsecpuVm *vm);
@@ -216,6 +228,7 @@ const Int32 *apiEntry(OsecpuVm *vm)
 	if (func == 0x0009) { api0009_sleep(vm);		goto fin; }
 	if (func == 0x000d) { api000d_inkey(vm);		goto fin; }
 	if (func == 0x0010) { api0010_openWin(vm);		goto fin; }
+	if (func == 0x0013) { api0013_rand(vm);			goto fin; }
 	if (func == 0x07c0) { api07c0_fileRead(vm);		goto fin; }
 	if (func == 0x07c1) { api07c1_fileWrite(vm);	goto fin; }
 	jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
@@ -450,7 +463,7 @@ int apiSprintf(int buflen, unsigned char *buf, unsigned char *p, unsigned char *
 		if (i >= buflen) {
 err:
 			jitcSetRetCode(&vm->errorCode, EXEC_API_ERROR);
-			longjmp(apiWork.setjmpErr, 1);
+			return 0;
 		}
 		c = *p;
 		p += charLen;
@@ -512,17 +525,20 @@ err:
 			goto lz;
 		}
 		if (c == 0x05) {
+			if (p >= p1) goto err;
 			len = *p + 3; // 4-
 			p += charLen;
 			goto lz;
 		}
 		if (c == 0x06) {
+			if (p >= p1) goto err;
 			len = *p + 3; // 4-
 			p += charLen;
 			dis = *p;
 			p += charLen;
 lz:
 			for (j = 0; j < len; j++) {
+				if (i >= buflen) goto err;
 				c = ' ';
 				if (i >= dis)
 					c = buf[i - dis];
@@ -534,6 +550,32 @@ lz:
 		goto err;
 	}
 	return i;
+}
+
+void apiXorShiftSetSeed(unsigned int s)
+{
+	apiWork.xorShift[0] = 123456789;
+	apiWork.xorShift[1] = 362436069;
+	apiWork.xorShift[2] = 521288629;
+	apiWork.xorShift[3] =  88675123;
+	if (s != 0) {
+		apiWork.xorShift[0] ^= s = 0x6C078965U * (s ^ (s >> 30)) + 2;
+		apiWork.xorShift[1] ^= s = 0x6C078965U * (s ^ (s >> 30)) + 3;
+		apiWork.xorShift[2] ^= s = 0x6C078965U * (s ^ (s >> 30)) + 5;
+		apiWork.xorShift[3] ^= s = 0x6C078965U * (s ^ (s >> 30)) + 7;
+	}
+	return;
+}
+
+unsigned int apiXorShift()
+{
+	unsigned int *a = apiWork.xorShift;
+	unsigned int t = (a[0] ^ (a[0] << 11));
+	a[0] = a[1];
+	a[1] = a[2];
+	a[2] = a[3];
+	a[3] = (a[3] ^ (a[3] >> 19)) ^ (t ^ (t >> 8));
+	return a[3];
 }
 
 void api0001_putString(OsecpuVm *vm)
@@ -872,7 +914,7 @@ void api000d_inkey(OsecpuVm *vm)
 		}
 	}
 	vm->bit[0x31] = vm->bit[0x32] = 32;
-	vm->r[0x31] = vm->r[0x31] = 0;
+	vm->r[0x31] = vm->r[0x32] = 0;
 	if (vm->r[0x30] == 4132) vm->r[0x31]--;
 	if (vm->r[0x30] == 4133) vm->r[0x32]--;
 	if (vm->r[0x30] == 4134) vm->r[0x31]++;
@@ -904,6 +946,14 @@ void api0010_openWin(OsecpuVm *vm)
 	for (i = 0; i < x * y; i++)
 		vram[i] = c;
 fin:
+	return;
+}
+
+void api0013_rand(OsecpuVm *vm)
+{
+	int range = execStep_getRxx(vm, 0x31, 32);
+	vm->bit[0x30] = 32;
+	vm->r[0x30] = (apiXorShift() & 0x7fffffff) % (range + 1);
 	return;
 }
 
