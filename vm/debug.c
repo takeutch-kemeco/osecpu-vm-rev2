@@ -200,9 +200,9 @@ void debugMonitor(OsecpuVm *vm)
 			printf("tallocTotal0:%9d, tallocTotal1:%9d\n", vm->tallocTotal0, vm->tallocTotal1);
 			for (i = 0; i < vm->ptrCtrlSize; i++) {
 				if (vm->ptrCtrl[i].size >= 0) {
-					printf("  sign:0x%08x, size:%09d, typ:0x%04x, flags:0x%04x, DR0:%04d, DR1:%04d\n",
+					printf("  sign:0x%08x, size:%09d, typ:0x%04x, flags:0x%04x, DR00:%04d, DR01:%04d\n",
 						vm->ptrCtrl[i].liveSign, vm->ptrCtrl[i].size, vm->ptrCtrl[i].typ,
-						vm->ptrCtrl[i].flags, vm->ptrCtrl[i].dr[0], vm->ptrCtrl[i].dr[1]);
+						vm->ptrCtrl[i].flags, vm->ptrCtrl[i].dr0[0], vm->ptrCtrl[i].dr0[1]);
 				}
 			}
 			continue;

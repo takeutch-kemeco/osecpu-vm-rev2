@@ -10,7 +10,7 @@ typedef struct _PtrCtrl {
 	int liveSign, size, typ, flags;
 		// flags: 1:malloc, 2:freeable
 	unsigned char *p0, *b0;
-	Int32 dr[2];
+	Int32 dr0[2], dr1[2];
 } PtrCtrl;
 
 typedef struct _PReg {

@@ -1,0 +1,1 @@
+c:\mingw\bin\gcc.exe -o oseconv.exe -Os convmain.c filtlib.c charfile.c int32.c skpsig07.c uint4.c skpsig00.c decodhh4.c cnvbs32.c osecode.c hedsig07.c uint8b.c writfile.c cnvbk.c hedsig00.c uint8a.c -Wall -Wl,-s

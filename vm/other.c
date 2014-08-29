@@ -253,8 +253,8 @@ void execStepOther(OsecpuVm *vm)
 		pctrl->flags = 1; // heap
 		pctrl->p0 = vm->p[p].p0;
 		pctrl->b0 = vm->p[p].bit;
-		pctrl->dr[0] = vm->dr[0];
-		pctrl->dr[1] = vm->dr[1];
+		pctrl->dr0[0] = vm->dr[0];
+		pctrl->dr0[1] = vm->dr[1];
 		vm->p[p].ptrCtrl = pctrl;
 		vm->p[p].liveSign = pctrl->liveSign;
 		if (vm->errorCode == 0)
@@ -290,7 +290,9 @@ void execStepOther(OsecpuVm *vm)
 			goto fin;
 		}
 		vm->mallocTotal0 -= typSize0 * i / 8 + 32;
-		pctrl->liveSign ^= -1;
+		pctrl->liveSign++; // Šï”‚É‚·‚é.
+		pctrl->dr1[0] = vm->dr[0];
+		pctrl->dr1[1] = vm->dr[1];
 		if ((pctrl->flags & 2) == 0) {
 			if (pctrl->p0 != NULL) free(pctrl->p0);
 			if (pctrl->b0 != NULL) free(pctrl->b0);
@@ -525,7 +527,7 @@ int osecpuVmPtrCtrlInit(OsecpuVm *vm, int size)
 int osecpuVmMakeLiveSign(OsecpuVm *vm)
 {
 	static int i = 0;
-	i++;
+	i += 2;
 	return i;
 }
 
